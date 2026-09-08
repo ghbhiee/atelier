@@ -229,7 +229,7 @@ try {
     btn.click();
     for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 300)); if (document.querySelector('main .think')) break; }
     const think = document.querySelector('main .think');
-    const meter = [...document.querySelectorAll('main .muted.small')].map(e => e.textContent).find(t => t.includes('tok/s') || t.includes('首字'));
+    const meter = [...document.querySelectorAll('main .meter, main .muted.small')].map(e => e.textContent).find(t => t.includes('tok/s') || t.includes('首字'));
     return JSON.stringify({ think: !!think, thinkHidden: think ? think.hidden : null, thinkText: think ? think.textContent.slice(0, 40) : '', meter: meter || '' });
   })()`);
   const c = (() => { try { return JSON.parse(chat); } catch { return { err: chat }; } })();
@@ -374,11 +374,11 @@ try {
       hint: [...document.querySelectorAll('main .hint')].map(b => b.textContent).join(' | ').slice(0, 200),
     })`));
     if (/加载|卸载/.test(live.hint)) sawProgress = true;
-    if (/🎙/.test(live.badges)) break;
+    if (/IndexTTS|Kokoro|Qwen3-TTS/.test(live.badges)) break;
     await sleep(500);
   }
   const loadedNow = await cdp.eval(`fetch('api/models').then(r => r.json()).then(m => Object.keys(m.loaded).join(','))`);
-  ok(/🎙/.test(live.badges), `the dashboard shows the newly loaded model without a reload: badges=${live.badges.slice(0, 90)} loaded=${loadedNow} ensure=${String(ensureResp).slice(0, 120)}`);
+  ok(/IndexTTS|Kokoro|Qwen3-TTS/.test(live.badges), `the dashboard shows the newly loaded model without a reload: badges=${live.badges.slice(0, 90)} loaded=${loadedNow} ensure=${String(ensureResp).slice(0, 120)}`);
   const steps = JSON.parse(await cdp.eval(`JSON.stringify(window.__mev)`));
   const longest = steps.map((x) => x.split(" → ").length).reduce((a, b) => Math.max(a, b), 0);
   ok(sawProgress || longest >= 2, `the load streams its real steps instead of an empty spinner (${longest} steps): ${(steps.find((x) => x.includes("→")) || steps[0] || "").slice(0, 110)}`);
@@ -401,6 +401,7 @@ try {
   const wired = JSON.parse(await cdp.eval(`fetch('api/models').then(r => r.json()).then(m => JSON.stringify({ total: m.vramTotal, avail: m.available }))`));
   ok(wired.total > 0, `the model snapshot answers for the active machine (vram ${wired.total} MiB)`);
   ok(boxes.boxes.every((b) => "cloudState" in b), "每台机器都带云上状态，不用切过去也能看到");
+  ok(boxes.boxes.every((b) => "gone" in b), "已删除的机器会被标出来，不该还留在下拉里给人选");
   // 下拉框只是看哪台，不该有副作用
   await cdp.eval(`location.hash = '#/'`); await sleep(1200);
   const activeBefore = JSON.parse(await cdp.eval(`fetch('api/boxes').then(r => r.text())`)).active;
@@ -431,6 +432,48 @@ try {
   ok(!setTabs.dumpsFullRules, "the page links the rules rather than dumping the whole document");
   const assistant = JSON.parse(await cdp.eval(`fetch('api/settings/assistant').then(r => r.text())`));
   ok("baseUrl" in assistant && Array.isArray(assistant.presets), `the assistant endpoint answers (${assistant.baseUrl}, ${assistant.presets.length} 预设)`);
+
+  step("model visibility: unchecking a model in settings drops it out of the pickers");
+  await cdp.eval(`(() => { const b = [...document.querySelectorAll('main .subtab')].find(x => /模型显示/.test(x.textContent)); if (b) b.click(); })()`);
+  await waitFor("document.querySelectorAll('main .mgroup input[type=checkbox]').length > 0", 8000);
+  const visBefore = JSON.parse(await cdp.eval(`JSON.stringify({
+    groups: document.querySelectorAll('main .mgroup').length,
+    boxes: document.querySelectorAll('main .mgroup input[type=checkbox]').length,
+  })`));
+  ok(visBefore.groups >= 2 && visBefore.boxes >= 4, `every capability lists its models with a checkbox (${visBefore.groups} 组 / ${visBefore.boxes} 个)`);
+  // pick an llm the dashboard is not currently defaulting to, hide it, and check the capability card's dropdown
+  const target = JSON.parse(await cdp.eval(`fetch('api/models').then(r => r.json()).then(s => {
+    const def = s.defaults && s.defaults.llm;
+    const m = s.models.filter(x => x.modality === 'llm' && !x.hereMissing && x.id !== def)[0];
+    return JSON.stringify({ id: m && m.id, name: m && m.name });
+  })`));
+  ok(!!target.id, "there is a second llm to hide: " + target.name);
+  const hid = JSON.parse(await cdp.eval(`(async () => {
+    const boxes = [...document.querySelectorAll('main .mgroup label')];
+    const row = boxes.find(l => l.textContent.includes(${JSON.stringify(target.name)}));
+    if (!row) return JSON.stringify({ err: 'row not found' });
+    const cb = row.querySelector('input[type=checkbox]');
+    const was = cb.checked; cb.click();
+    await new Promise(r => setTimeout(r, 600));
+    const after = await fetch('api/models').then(r => r.json());
+    const m = after.models.find(x => x.id === ${JSON.stringify(target.id)});
+    return JSON.stringify({ was, hidden: !!m.hidden });
+  })()`));
+  ok(hid.was === true && hid.hidden === true, `unchecking it persists as hidden (${JSON.stringify(hid)})`);
+  await cdp.eval(`location.hash = '#/models'`); await sleep(1200);
+  const picker = JSON.parse(await cdp.eval(`JSON.stringify({
+    inPicker: [...document.querySelectorAll('main .caps select option')].some(o => o.value === ${JSON.stringify(target.id)}),
+    inCatalog: document.body.innerText.includes(${JSON.stringify(target.name)}),
+    hiddenBadge: [...document.querySelectorAll('main .badge')].some(b => b.textContent.trim() === '已隐藏'),
+  })`));
+  ok(!picker.inPicker, "the hidden model is gone from the capability card's dropdown");
+  ok(picker.inCatalog && picker.hiddenBadge, "but the model manager still lists it, marked 已隐藏");
+  await cdp.eval(`fetch('api/models/${target.id}', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hidden: false }) })`);
+  await sleep(300);
+  // tabbed() remembers the last tab in localStorage — put settings back on its first tab so later
+  // steps (which look at the settings page's buttons) see what a fresh visitor sees.
+  await cdp.eval(`location.hash = '#/settings'`); await sleep(800);
+  await cdp.eval(`(() => { const b = document.querySelector('main .subtab'); if (b && !b.classList.contains('on')) b.click(); })()`);
 
   step("the prompt editor: save is prominent, 从库插入 is gone, rewrite is offered");
   await cdp.eval(`location.hash = '#/generate'`); await sleep(1500);
@@ -470,6 +513,143 @@ try {
   ok(voiceTab.instruct, "it documents the instructions / style parameter");
   ok(voiceTab.voiceIds, "it explains what goes in voice (the id)");
   ok(voiceTab.copyBtn, `each engine can be copied as an agent brief (${voiceTab.engines} rows)`);
+
+  step("look and feel: one button system, tabs that are not buttons, no emoji, dark native controls");
+  await cdp.eval(`location.hash = '#/chat'`); await sleep(1200);
+  const look = JSON.parse(await cdp.eval(`(() => {
+    const css = getComputedStyle(document.documentElement);
+    const btns = [...document.querySelectorAll('main button:not(.subtab)')];
+    const hs = [...new Set(btns.map(b => Math.round(b.getBoundingClientRect().height)).filter(x => x > 0))];
+    const emoji = (document.querySelector('main').innerText.match(/[\\u{1F300}-\\u{1FAFF}]/gu) || []);
+    return JSON.stringify({
+      scheme: css.colorScheme,
+      accent: css.getPropertyValue('--accent').trim(),
+      heights: hs.sort((a, b) => a - b),
+      emoji: emoji.slice(0, 5),
+      chatLog: !!document.querySelector('.chat-log'),
+    });
+  })()`));
+  ok(look.scheme === "dark", `native controls follow the dark theme (color-scheme: ${look.scheme})`);
+  ok(!/f59e0b|fbbf24/i.test(look.accent), `the amber accent is gone (accent is ${look.accent})`);
+  ok(look.heights.length <= 2, `buttons share one or two heights, not a jumble: ${look.heights.join(", ")}px`);
+  ok(look.emoji.length === 0, `no emoji in the interface${look.emoji.length ? ": " + look.emoji.join("") : ""}`);
+  ok(look.chatLog, "the chat page renders a real conversation log");
+  const tabsLook = JSON.parse(await cdp.eval(`(() => {
+    location.hash = '#/settings';
+    return new Promise(r => setTimeout(() => {
+      const t = document.querySelector('main .subtab');
+      const b = [...document.querySelectorAll('main button:not(.subtab)')][0];
+      if (!t || !b) return r(JSON.stringify({ err: 'not rendered' }));
+      const cs = getComputedStyle(t), cb = getComputedStyle(b);
+      r(JSON.stringify({ tabRadius: cs.borderRadius, btnRadius: cb.borderRadius, tabBorder: cs.borderBottomWidth, tabBg: cs.backgroundColor }));
+    }, 1500));
+  })()`));
+  ok(!tabsLook.err && tabsLook.tabRadius !== tabsLook.btnRadius, `tabs no longer look like buttons (tab radius ${tabsLook.tabRadius} vs button ${tabsLook.btnRadius})`);
+
+  step("the job detail shows the prompt, and the voice input box is not tiny");
+  await cdp.eval(`location.hash = '#/voice'`);
+  await waitFor("!!document.querySelector('.speak-text')", 8000);
+  const box = await cdp.eval(`Math.round(document.querySelector('.speak-text').getBoundingClientRect().height)`);
+  ok(box >= 150, `the 说什么 box is the biggest control on the page (${box}px tall)`);
+  const players = JSON.parse(await cdp.eval(`JSON.stringify({ native: document.querySelectorAll('audio[controls]').length, custom: document.querySelectorAll('.ap').length })`));
+  ok(players.native === 0, `no native audio widget left (they render light on a dark page): ${players.native} native, ${players.custom} custom`);
+  // 侧栏：分组标题不能跟可点的条目长得一样，否则分不清哪个能点
+  const nav = JSON.parse(await cdp.eval(`(() => {
+    const a = document.querySelector('nav a:not(.active)'), hh = document.querySelector('.nav-h');
+    if (!a || !hh) return JSON.stringify({ err: 'no nav' });
+    const ca = getComputedStyle(a), ch = getComputedStyle(hh);
+    const act = document.querySelector('nav a.active');
+    return JSON.stringify({ linkSize: parseFloat(ca.fontSize), headSize: parseFloat(ch.fontSize),
+      linkColor: ca.color, headColor: ch.color, activeMark: act ? getComputedStyle(act, '::before').width : '0px' });
+  })()`));
+  ok(!nav.err && nav.headSize < nav.linkSize - 2, `section headings are visibly smaller than the links (${nav.headSize} vs ${nav.linkSize}px)`);
+  ok(nav.headColor !== nav.linkColor, `and a different colour, so headings do not read as clickable (${nav.headColor} vs ${nav.linkColor})`);
+  ok(nav.activeMark !== "0px" && nav.activeMark !== "auto", `the current page carries a marker (${nav.activeMark})`);
+  // 模型目录：第一列不许把说明拉成一长条
+  await cdp.eval(`location.hash = '#/models'`);
+  await waitFor("!!document.querySelector('table.models')", 10000);
+  const col = JSON.parse(await cdp.eval(`(() => {
+    const t = document.querySelector('table.models'); const c = t.querySelector('td');
+    return JSON.stringify({ first: Math.round(c.getBoundingClientRect().width), table: Math.round(t.getBoundingClientRect().width) });
+  })()`));
+  ok(col.first / col.table < 0.45, `the model column leaves room for the rest (${col.first}/${col.table}px)`);
+  // 分组标题必须跟下面的内容分开，不能黑成一片
+  const grp = JSON.parse(await cdp.eval(`(() => {
+    const g = document.querySelector('.mgroup'); if (!g) return JSON.stringify({ err: 'no group' });
+    const hd = g.querySelector('.mgroup-h'), bd = g.querySelector('.mgroup-b');
+    return JSON.stringify({ headBg: getComputedStyle(hd).backgroundColor, bodyBg: getComputedStyle(bd).backgroundColor,
+      border: getComputedStyle(hd).borderBottomWidth, groups: document.querySelectorAll('.mgroup').length });
+  })()`));
+  ok(!grp.err && grp.headBg !== grp.bodyBg, `each capability group has a header bar you can see (${grp.headBg} vs ${grp.bodyBg}, ${grp.groups} groups)`);
+  // 控件不能是纯黑，那看着像没做样式
+  const ctl = JSON.parse(await cdp.eval(`(() => {
+    const s2 = document.querySelector('main select'); if (!s2) return JSON.stringify({ err: 'no select' });
+    const cs = getComputedStyle(s2);
+    return JSON.stringify({ bg: cs.backgroundColor, maxW: cs.maxWidth, w: Math.round(s2.getBoundingClientRect().width) });
+  })()`));
+  ok(!ctl.err && ctl.bg !== "rgb(14, 17, 22)" && ctl.bg !== "rgb(0, 0, 0)", `controls sit on a surface, not near-black (${ctl.bg})`);
+  ok(ctl.maxW !== "none", `a dropdown is not stretched across the whole column (max-width ${ctl.maxW})`);
+
+  step("the chat page fills the screen and puts the model picker under the input");
+  await cdp.eval(`location.hash = '#/chat'`);
+  await waitFor("!!document.querySelector('.chat-in')", 8000);
+  const chatUi = JSON.parse(await cdp.eval(`(() => {
+    const c = document.querySelector('.chat'), log = document.querySelector('.chat-log');
+    const inBox = document.querySelector('.chat-in'), selIn = document.querySelector('.chat-in select');
+    const above = document.querySelector('main > .chat > *:first-child') === log;
+    return JSON.stringify({ h: Math.round(c.getBoundingClientRect().height), vh: window.innerHeight,
+      logFirst: above, pickerUnder: !!selIn, inBottom: Math.round(inBox.getBoundingClientRect().bottom) });
+  })()`));
+  ok(chatUi.h / chatUi.vh > 0.8, `the conversation fills the screen (${chatUi.h}/${chatUi.vh}px)`);
+  ok(chatUi.logFirst, "the log is the first thing on the page — no toolbar above it");
+  ok(chatUi.pickerUnder, "the model picker lives in the input area, where chat apps put it");
+
+  step("chat takes images: attach one, see the thumbnail, send it as an image_url message");
+  // only models launched with --mmproj can see; make sure one is loadable and picked before attaching
+  const seer = JSON.parse(await cdp.eval(`fetch('api/models').then(r => r.json()).then(s => {
+    const m = s.models.find(x => x.modality === 'llm' && (x.args || []).includes('--mmproj') && !x.hereMissing);
+    return JSON.stringify({ id: m && m.id, tested: m && !!m.tested });
+  })`));
+  ok(!!seer.id, "the catalogue offers a model that can look at pictures: " + seer.id);
+  if (!seer.tested) await cdp.eval(`fetch('api/models/${seer.id}', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tested: true }) })`);
+  await cdp.eval(`location.hash = '#/dashboard'`); await sleep(300);
+  await cdp.eval(`location.hash = '#/chat'`);
+  await waitFor("!!document.querySelector('.chat-in select')", 8000);
+  await cdp.eval(`(() => { const s = document.querySelector('.chat-in select'); s.value = ${JSON.stringify(seer.id)}; })()`);
+  const img = JSON.parse(await cdp.eval(`(async () => {
+    const btn = [...document.querySelectorAll('.chat-in button')].find(b => b.textContent.trim() === '图片');
+    if (!btn) return JSON.stringify({ err: 'no picture button' });
+    // build a real PNG and hand it to the file input the way a file picker would
+    const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
+    const g = cv.getContext('2d'); g.fillStyle = '#c33'; g.fillRect(0, 0, 40, 30);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    const file = new File([blob], 'red.png', { type: 'image/png' });
+    const dt = new DataTransfer(); dt.items.add(file);
+    const input = document.querySelector('.chat-in input[type=file]');
+    input.files = dt.files; input.dispatchEvent(new Event('change'));
+    await new Promise(r => setTimeout(r, 700));
+    const thumbs = document.querySelectorAll('.chat-in .chat-atts .att img').length;
+    // send it and capture what actually goes on the wire
+    let sent = null; const orig = window.fetch;
+    window.fetch = (u, o) => { if (String(u).includes('chat/completions')) { try { sent = JSON.parse(o.body); } catch (e) {} } return orig(u, o); };
+    document.querySelector('.chat-in textarea').value = '这是什么颜色';
+    [...document.querySelectorAll('.chat-in button')].find(b => b.textContent.trim() === '发送').click();
+    await new Promise(r => setTimeout(r, 1500));
+    window.fetch = orig;
+    const last = sent && sent.messages[sent.messages.length - 1];
+    const parts = last && Array.isArray(last.content) ? last.content : [];
+    return JSON.stringify({
+      thumbs,
+      cleared: document.querySelectorAll('.chat-in .chat-atts .att').length,
+      inBubble: document.querySelectorAll('.msg.me .chat-atts img').length,
+      kinds: parts.map(x => x.type),
+      dataUrl: parts.some(x => x.type === 'image_url' && x.image_url.url.startsWith('data:image/')),
+    });
+  })()`));
+  ok(!img.err && img.thumbs === 1, `attaching an image shows a thumbnail in the composer (${JSON.stringify(img)})`);
+  ok(img.kinds.join(",") === "text,image_url", `the request carries text + image_url parts (${img.kinds.join(",")})`);
+  ok(img.dataUrl, "the image travels as a data: URL the OpenAI schema accepts");
+  ok(img.cleared === 0 && img.inBubble === 1, "after sending, the composer is empty and the picture sits in the message");
 
   step("switching project tabs quickly must not paint the page twice");
   await cdp.eval(`location.hash = '#/project/default/assets'`); await sleep(400);

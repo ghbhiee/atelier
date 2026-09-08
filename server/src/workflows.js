@@ -81,6 +81,7 @@ const nodesOf = (wf, ct) => Object.entries(wf).filter(([, v]) => v.class_type ==
  *         lora: { name?: string, strength?: number, disabled?: boolean } | null   (template default when omitted) }
  * Returns { workflow, h3Node, length, seed, expectedRefs }
  */
+/** 出片时选中的量化版本（buildWorkflow 会把它放进返回值，任务日志据此说明用了哪套权重）。 */
 export function buildWorkflow(spec) {
   if (spec.workflow === "whitemodel") {
     const src = (spec.videos || [])[0]; if (!src) throw new Error("白模需要一段源视频");
@@ -92,6 +93,10 @@ export function buildWorkflow(spec) {
   }
   const wf = loadTemplate(spec.workflow);
   const meta = WORKFLOWS[spec.workflow];
+  // 车队里混着 24 / 32 / 48 / 96 GB 的卡，权重文件名不能写死在模板里：按当前这张卡挑量化版本。
+  // 不传 vramTotal / variants 时保持模板原样（32 GB 的 INT8），所以老行为不变。
+  const variant = pickVariant({ variants: spec.variants }, spec.vramTotal);
+  if (variant) applyVariant(wf, variant, meta?.weights);
   for (const [v, nm] of [[spec.width, "宽"], [spec.height, "高"]]) if (!Number.isInteger(v) || v % 32 || v < 64 || v > 2048) throw new Error(`${nm} ${v} 必须是 32 的倍数（H3 会在 patchify 时 reshape 失败）`);
   const length = alignLength(spec.length);
   if (length > 362 + 17) throw new Error("一次最长约 15 秒（362 帧），更长的请分段生成再拼接");
@@ -159,7 +164,7 @@ export function buildWorkflow(spec) {
   const seed = Number.isInteger(spec.seed) ? spec.seed : Math.floor(Math.random() * 2 ** 31);
   for (const n of nodesOf(wf, "RandomNoise")) wf[n].inputs.noise_seed = seed;
   for (const n of nodesOf(wf, "SaveVideo")) wf[n].inputs.filename_prefix = spec.prefix || "h3studio";
-  return { workflow: wf, h3Node: hn, length, seed, steps, expectedRefs };
+  return { workflow: wf, h3Node: hn, length, seed, steps, expectedRefs, variant: variant ? { id: variant.id, label: variant.label } : null };
 }
 
 /** Which reference keys actually reached the H3 node, read back from /history. */

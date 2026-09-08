@@ -30,6 +30,13 @@ if ! "$PY" -c "import torchaudio" >/dev/null 2>&1; then
   "$PY" -m pip install -q torchaudio --index-url https://download.pytorch.org/whl/cpu 2>&1 | tail -1 || true
 fi
 
+# The white-model node decodes / encodes video with OpenCV (wm.py reimplements the *filters* in torch but
+# still uses cv2.VideoCapture / VideoWriter). Not in requirements.txt and not in the pod images.
+if ! "$PY" -c "import cv2" >/dev/null 2>&1; then
+  echo "== opencv (白模节点的视频读写)"
+  "$PY" -m pip install -q "opencv-python-headless==4.12.0.88" -i https://pypi.tuna.tsinghua.edu.cn/simple 2>&1 | tail -1 || true
+fi
+
 echo "== model links"
 M=/model
 link() { # link <subdir> <name> <target>

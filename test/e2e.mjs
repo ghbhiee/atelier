@@ -112,6 +112,23 @@ try {
     const bad = await call("/api/jobs", { method: "POST", body: { projectId: p.id, workflow: "native_t2v", prompt: "x", width: 500, height: 384, seconds: 2 } });
     assert(bad.status === 400 && /32/.test(bad.body.error), "size validation: " + JSON.stringify(bad.body));
 
+    step("H3 权重按显卡显存自动挑（32/24/16 GB 各选一套，不传参数时保持模板原样）");
+    {
+      const { buildWorkflow } = await import("../server/src/workflows.js");
+      const cat = JSON.parse(await fs.readFile(new URL("../server/src/models.catalog.json", import.meta.url), "utf8"));
+      const variants = cat.models.find((m) => m.id === "h3")?.variants;
+      assert(Array.isArray(variants) && variants.length >= 3, "目录里有 H3 的量化档位");
+      const base = { workflow: "native_t2v", prompt: "x", width: 640, height: 384, length: 22, steps: 4, seed: 1 };
+      const unetOf = (b) => Object.values(b.workflow).find((n) => /UNETLoader|UnetLoaderGGUF/.test(n.class_type));
+      const at = (vram) => { const b = buildWorkflow({ ...base, variants, vramTotal: vram }); return { id: b.variant?.id, n: unetOf(b) }; };
+      const g32 = at(32607), g24 = at(24576), g16 = at(16384);
+      assert(g32.id === "int8" && g32.n.class_type === "UNETLoader", "32 GB 用 INT8（回归：这是现在跑的那套）");
+      assert(g24.id === "gguf-q5" && /\.gguf$/.test(g24.n.inputs.unet_name), "24 GB 换成 GGUF Q5：" + g24.n.inputs.unet_name);
+      assert(g16.id === "gguf-q4", "16 GB 再降一档到 Q4：" + g16.n.inputs.unet_name);
+      const plain = unetOf(buildWorkflow(base));
+      assert(/pruned_int8_convrot/.test(plain.inputs.unet_name), "不传 variants 时模板原样，老行为不变");
+    }
+
     step("t2v job runs to completion");
     const j1 = await ok("/api/jobs", { method: "POST", body: { projectId: p.id, title: "e2e t2v", workflow: "native_t2v", prompt: "integrated_multimodal_description: test\n\noverall_soundscape: quiet\n\nnon_diegetic_music: N/A", width: 640, height: 384, seconds: 2, seed: 7 } });
     assert(j1.length === 56 && j1.seed === 7 && j1.steps === 4, "job derived params: " + JSON.stringify({ length: j1.length, seed: j1.seed, steps: j1.steps }));

@@ -266,7 +266,11 @@ export class Jobs {
       const audios = []; for (const a of j.audios || []) audios.push(await remote(a));
       const lastFrame = j.lastFrame ? await remote(j.lastFrame) : null;
       if (j.status === "cancelled") return;
-      const built = buildWorkflow({ workflow: j.workflow, prompt: j.prompt, width: j.width, height: j.height, length: j.length, steps: j.steps, seed: j.seed, refSize: j.refSize, prefix: `h3s_${j.id}`, images, lastFrame, videos, videoAudio: j.videoAudio, audios, lora: j.lora || null, whitemodel: j.whitemodel || null });
+      // 按当前这张卡挑 H3 的量化版本（目录里的 variants），32 GB 仍是 INT8
+      const h3def = (await this.models?.catalog?.().catch(() => null))?.models?.find((m) => m.id === "h3") || null;
+      const vramTotal = this.models?.state?.gpu?.vram?.total || null;
+      const built = buildWorkflow({ workflow: j.workflow, prompt: j.prompt, width: j.width, height: j.height, length: j.length, steps: j.steps, seed: j.seed, refSize: j.refSize, prefix: `h3s_${j.id}`, images, lastFrame, videos, videoAudio: j.videoAudio, audios, lora: j.lora || null, whitemodel: j.whitemodel || null, variants: h3def?.variants || null, vramTotal });
+      if (built.variant) j.log.push(line(`权重：${built.variant.label}（按 ${Math.round(vramTotal / 1024)} GB 显存选的）`));
       const r = await this.comfy.submit(built.workflow);
       await this.set(j, { status: "submitted", promptId: r.prompt_id, submittedAt: nowS(), queueNumber: r.number }, `已提交 ${r.prompt_id.slice(0, 8)}  ${j.width}x${j.height}  ${j.length} 帧 ≈ ${j.seconds}s  steps=${j.steps}  seed=${j.seed}`);
       this.power.status.idleSince = null;

@@ -288,15 +288,26 @@ export class AssetSync {
     try {
       const cmp = await this.compare();
       if (!cmp.available) return { ...done, ...cmp };
+      // 换机器正是要搬素材的时候，用最快的那条：隧道（约 5 MB/s）→ 并行 TCP（250–540 KB/s）。
+      // 跟 jobs.js 里那条路径保持一致，别让「同步」比「跑任务」慢一个数量级。
       if (push) for (const a of cmp.missingOnBox.slice(0, limit)) {
+        const { file, asset } = this.projects.assetPath(a.projectId, a.id);
+        const name = asset.file || asset.name;
         try {
-          const { file, asset } = this.projects.assetPath(a.projectId, a.id);
-          const r = await this.direct.uploadParallel(file, a.id, asset.file || asset.name);
-          done.pushed.push({ id: a.id, seconds: r.seconds, streams: r.streams });
-        } catch (e) { done.failed.push({ id: a.id, dir: "push", error: e.message }); }
+          const r = await this.direct.pushViaTunnel(file, a.id, name);
+          done.pushed.push({ id: a.id, seconds: r.seconds, mbps: r.mbps, via: "tunnel" });
+        } catch (e1) {
+          try {
+            const r = await this.direct.uploadParallel(file, a.id, name);
+            done.pushed.push({ id: a.id, seconds: r.seconds, streams: r.streams, via: "parallel-tcp" });
+          } catch (e2) { done.failed.push({ id: a.id, dir: "push", error: `隧道：${e1.message}；并行：${e2.message}` }); }
+        }
       }
       if (pull) for (const m of cmp.missingHere.slice(0, limit)) done.pulled.push({ id: m.id, note: "GPU 上有、13 没有：留着不动（可能属于别的会话）" });
-      if (done.pushed.length) console.log(`[assetsync] 推了 ${done.pushed.length} 个素材到 GPU`);
+      if (done.pushed.length) {
+        const viaT = done.pushed.filter((x) => x.via === "tunnel").length;
+        console.log(`[assetsync] 推了 ${done.pushed.length} 个素材到 GPU（隧道 ${viaT}，并行 TCP ${done.pushed.length - viaT}）`);
+      }
       return done;
     } finally { this.running = false; }
   }

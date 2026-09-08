@@ -77,6 +77,16 @@
       "label": "转写",
       "modality": "voice",
       "default": "sensevoice-small"
+    },
+    "vision": {
+      "label": "看图",
+      "modality": "llm",
+      "default": "qwen3-vl-32b-thinking-q4"
+    },
+    "ocr": {
+      "label": "文档识别",
+      "modality": "llm",
+      "default": "unlimited-ocr-q8"
     }
   },
   "models": [
@@ -149,7 +159,10 @@
       "vram": 2500,
       "tested": true,
       "testedAt": "2026-09-07",
-      "note": "335M 参数，fp16 约 0.7G；节点 AtelierWhiteModel 自己按需加载，跑完释放。实测 73 s/1760 帧 720p 端到端 159 s（深度 31 fps，着色 22 fps），四项验收全过；可与 LLM 共存。"
+      "note": "335M 参数，fp16 约 0.7G；节点 AtelierWhiteModel 自己按需加载，跑完释放。实测 73 s/1760 帧 720p 端到端 159 s（深度 31 fps，着色 22 fps），四项验收全过；可与 LLM 共存。",
+      "requires": [
+        "/root/model-cache/Depth-Anything-V2-Large-hf"
+      ]
     },
     {
       "id": "qwen3.8-27b-q4",
@@ -245,7 +258,9 @@
         "on",
         "--jinja"
       ],
-      "note": "Qwen 官方 GGUF，无删减；32B 上 32G 卡上下文要压到 16k。"
+      "note": "Qwen 官方 GGUF，无删减；32B 上 32G 卡上下文要压到 16k。",
+      "ctxMax": 131072,
+      "kvBytesPerToken": 139264
     },
     {
       "id": "glm-4.7-flash-q4",
@@ -274,7 +289,8 @@
         "on",
         "--jinja"
       ],
-      "note": "MoE，速度快；备选。"
+      "note": "MoE，速度快；备选。",
+      "ctxMax": 131072
     },
     {
       "id": "qwen3.8-27b-official-q5",
@@ -337,7 +353,9 @@
         "--mmproj",
         "/model/HuggingFace/LibertAIDAI/Qwen3.6-27B-NVFP4-GGUF/mmproj-Qwen3.6-27B-F16.gguf"
       ],
-      "note": "同目录带 mmproj，可看图（OpenAI 的 image_url 消息）；显存比 3.8 略省。"
+      "note": "同目录带 mmproj，可看图（OpenAI 的 image_url 消息）；显存比 3.8 略省。",
+      "ctxMax": 262144,
+      "vramExtraMib": 1800
     },
     {
       "id": "gemma3-12b-q4",
@@ -390,7 +408,10 @@
       "tested": true,
       "testedAt": "2026-09-07",
       "loadSeconds": 45,
-      "note": "中英日粤；零样本克隆，情绪可控。独立 venv 服务 voice:8600（含 SenseVoice 转写，同一进程共 8.2 GB，可与 Qwen 27B 同时在卡上：实测 26.8/32 GB）。首次启动额外下载 5.2 GB 辅助模型（w2v-bert / MaskGCT / BigVGAN，已缓存在 /root/model-cache/IndexTTS-2/hf_cache）。实测：33 字中文 6.7 s 音频 11 s（冷），英文克隆 6.4 s 音频 6 s（热）。"
+      "note": "中英日粤；零样本克隆，情绪可控。独立 venv 服务 voice:8600（含 SenseVoice 转写，同一进程共 8.2 GB，可与 Qwen 27B 同时在卡上：实测 26.8/32 GB）。首次启动额外下载 5.2 GB 辅助模型（w2v-bert / MaskGCT / BigVGAN，已缓存在 /root/model-cache/IndexTTS-2/hf_cache）。实测：33 字中文 6.7 s 音频 11 s（冷），英文克隆 6.4 s 音频 6 s（热）。",
+      "requires": [
+        "/root/index-tts/.venv/bin/python"
+      ]
     },
     {
       "id": "qwen3-tts",
@@ -426,7 +447,10 @@
         "Ono_Anna",
         "Sohee"
       ],
-      "note": "内置 9 个音色（含北京腔 Dylan、四川腔 Eric、日语 Ono_Anna、韩语 Sohee）+ 风格指令；给参考声时自动切到 Base 版克隆，填「音色描述」时切到 VoiceDesign。独立 venv /root/venvs/qwen-tts（pip qwen-tts）。实测：CustomVoice 冷 22 s / 热 3 s（2 s 音频），切 Base 克隆 29 s（含换权重，之后热），VoiceDesign 12 s；显存 6.5 GB（Base 7 GB），三套权重按需换，同时只留一套。"
+      "note": "内置 9 个音色（含北京腔 Dylan、四川腔 Eric、日语 Ono_Anna、韩语 Sohee）+ 风格指令；给参考声时自动切到 Base 版克隆，填「音色描述」时切到 VoiceDesign。独立 venv /root/venvs/qwen-tts（pip qwen-tts）。实测：CustomVoice 冷 22 s / 热 3 s（2 s 音频），切 Base 克隆 29 s（含换权重，之后热），VoiceDesign 12 s；显存 6.5 GB（Base 7 GB），三套权重按需换，同时只留一套。",
+      "requires": [
+        "/root/venvs/qwen-tts/.venv/bin/python"
+      ]
     },
     {
       "id": "kokoro",
@@ -460,7 +484,10 @@
         "am_adam",
         "bm_george"
       ],
-      "note": "开源小模型（Apache-2.0），中文 v1.1-zh 约 100 个编号内置音色 + 英文等（加载后 131 个）；不能克隆。独立 venv /root/venvs/kokoro。显存实测拆解：进程 1.3 GB = CUDA 上下文 0.6 GB + 权重与激活 0.55 GB（fp32；82M 参数本身 0.33 GB）。句子里出现英文单词时才按需再加载一套英文管线（+0.32 GB）。冷启动 22 秒，之后每句 <1 秒。"
+      "note": "开源小模型（Apache-2.0），中文 v1.1-zh 约 100 个编号内置音色 + 英文等（加载后 131 个）；不能克隆。独立 venv /root/venvs/kokoro。显存实测拆解：进程 1.3 GB = CUDA 上下文 0.6 GB + 权重与激活 0.55 GB（fp32；82M 参数本身 0.33 GB）。句子里出现英文单词时才按需再加载一套英文管线（+0.32 GB）。冷启动 22 秒，之后每句 <1 秒。",
+      "requires": [
+        "/root/venvs/kokoro/.venv/bin/python"
+      ]
     },
     {
       "id": "sensevoice-small",
@@ -478,6 +505,161 @@
       "tested": true,
       "testedAt": "2026-09-07",
       "note": "中英日粤韩转写 + 情感/事件标签；跑在 voice 服务进程里（随 IndexTTS-2 一起，5 秒加载，6 秒音频 5 秒转完）；库里已有，不用下载。"
+    },
+    {
+      "id": "qwen3-vl-32b-thinking-q4",
+      "params": "32B",
+      "ctxMax": 262144,
+      "name": "Qwen3-VL-32B Thinking Q4_K_M（看图 + 思考）",
+      "modality": "llm",
+      "runner": "llm",
+      "source": {
+        "type": "shared",
+        "path": "/model/HuggingFace/huihui-ai/Huihui-Qwen3-VL-32B-Thinking-abliterated/GGUF/ggml-model-Q4_K_M.gguf"
+      },
+      "quant": "Q4_K_M",
+      "fileGb": 18.4,
+      "vramEstimate": 26500,
+      "vram": null,
+      "tested": false,
+      "args": [
+        "-c",
+        "32768",
+        "-ngl",
+        "999",
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
+        "-fa",
+        "on",
+        "--jinja",
+        "--mmproj",
+        "/model/HuggingFace/huihui-ai/Huihui-Qwen3-VL-32B-Thinking-abliterated/GGUF/mmproj-model-f16.gguf"
+      ],
+      "note": "32B 视觉推理模型（huihui 去审查版），带 1.1 GB mmproj：能读图、截图、图表、手写；思考型，回答前会先推理。这张卡上最强的看图模型，权重 18.4 GB + 视觉塔约 2 GB，32k 上下文时约 25 GB。",
+      "kvBytesPerToken": 139264,
+      "vramExtraMib": 2200
+    },
+    {
+      "id": "qwen3-32b-q5",
+      "params": "32B",
+      "ctxMax": 131072,
+      "name": "Qwen3-32B Q5_K_M（官方，更高精度）",
+      "modality": "llm",
+      "runner": "llm",
+      "source": {
+        "type": "shared",
+        "path": "/model/ModelScope/Qwen/Qwen3-32B-GGUF/Qwen3-32B-Q5_K_M.gguf"
+      },
+      "quant": "Q5_K_M",
+      "fileGb": 21.6,
+      "vramEstimate": 27000,
+      "vram": null,
+      "tested": false,
+      "args": [
+        "-c",
+        "16384",
+        "-ngl",
+        "999",
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
+        "-fa",
+        "on",
+        "--jinja"
+      ],
+      "note": "和 qwen3-32b-q4 同一个模型，量化更轻（Q5_K_M）。这张卡上它和语音服务装不下，加载前会先卸掉语音；要长上下文就用 Q4。",
+      "kvBytesPerToken": 139264
+    },
+    {
+      "id": "glm-4.7-flash-q5",
+      "params": "MoE",
+      "ctxMax": 131072,
+      "name": "GLM-4.7-Flash UD-Q5_K_XL（unsloth 动态量化）",
+      "modality": "llm",
+      "runner": "llm",
+      "source": {
+        "type": "shared",
+        "path": "/model/ModelScope/unsloth/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-UD-Q5_K_XL.gguf"
+      },
+      "quant": "UD-Q5_K_XL",
+      "fileGb": 20.1,
+      "vramEstimate": 25500,
+      "vram": null,
+      "tested": false,
+      "args": [
+        "-c",
+        "16384",
+        "-ngl",
+        "999",
+        "--cache-type-k",
+        "q8_0",
+        "--cache-type-v",
+        "q8_0",
+        "-fa",
+        "on",
+        "--jinja"
+      ],
+      "note": "GLM-4.7-Flash 的高精度动态量化版，比同目录的 UD-Q4 大 2.5 GB、答案更稳；中文与代码都不错。实测 22 GB，语音在卡上时也能同时跑。"
+    },
+    {
+      "id": "llama3.1-8b-chinese-q4",
+      "params": "8B",
+      "ctxMax": 131072,
+      "name": "Llama3.1-8B 中文对话 Q4_K_M（小而快）",
+      "modality": "llm",
+      "runner": "llm",
+      "source": {
+        "type": "shared",
+        "path": "/model/HuggingFace/shenzhi-wang/Llama3.1-8B-Chinese-Chat/gguf/llama3.1_8b_chinese_chat_q4_k_m.gguf"
+      },
+      "quant": "Q4_K_M",
+      "fileGb": 4.6,
+      "vramEstimate": 7000,
+      "vram": null,
+      "tested": false,
+      "args": [
+        "-c",
+        "32768",
+        "-ngl",
+        "999",
+        "-fa",
+        "on",
+        "--jinja"
+      ],
+      "note": "只要约 7 GB 显存，可以和语音、白模甚至视频挤在一张卡上；适合批量改写、摘要、翻译这类不需要大脑的活。"
+    },
+    {
+      "id": "unlimited-ocr-q8",
+      "params": "3B",
+      "ctxMax": 32768,
+      "name": "Unlimited-OCR Q8_0（文档 / 截图识别）",
+      "modality": "llm",
+      "runner": "llm",
+      "source": {
+        "type": "shared",
+        "path": "/model/ModelScope/DevQuasar/baidu.Unlimited-OCR-GGUF/baidu.Unlimited-OCR.Q8_0.gguf"
+      },
+      "quant": "Q8_0",
+      "fileGb": 2.9,
+      "vramEstimate": 5500,
+      "vram": null,
+      "tested": false,
+      "args": [
+        "-c",
+        "16384",
+        "-ngl",
+        "999",
+        "-fa",
+        "on",
+        "--jinja",
+        "--mmproj",
+        "/model/ModelScope/DevQuasar/baidu.Unlimited-OCR-GGUF/mmproj-baidu.Unlimited-OCR.f16.gguf"
+      ],
+      "note": "百度 Unlimited-OCR 的 GGUF，带 mmproj：把截图 / 扫描件 / 表格转成文字或 Markdown。只认图，纯文字提问会答非所问；在「对话」页点「图片」把图发给它。只要 5.5 GB 显存，随用随载。",
+      "visionOnly": true
     }
   ]
 }

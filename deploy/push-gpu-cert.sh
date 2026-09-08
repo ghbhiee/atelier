@@ -1,5 +1,5 @@
 #!/bin/sh
-# Push the gpu.example.com certificate to the box's asset service and reload it.
+# Push the atelier.example.com certificate to the box's asset service and reload it.
 # Run by acme.sh's --reloadcmd after every renewal, and daily by cron in case the box was off then.
 # Idempotent: does nothing when the box already serves this exact certificate.
 set -eu

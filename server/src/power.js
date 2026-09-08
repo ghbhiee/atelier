@@ -194,7 +194,14 @@ export class Power {
         let inst = this.config.compshare;
         let cloud = await this.cs.state(inst.instanceId, { region: inst.region });
         this.status.cloudState = cloud;
-        if (cloud === "Stopped") {
+        // 机器可能已经被删掉了（云上查不到），这时候等 8 分钟毫无意义，直接说清楚并让车队接手
+        if (cloud === "NotFound") {
+          onProgress(`${this.config.fleet.active.label || this.config.fleet.active.name} 在云上已经不存在了（实例 ${inst.instanceId}）`);
+          const alt = await this.tryOtherBoxes(onProgress, new Error("实例不存在"));
+          if (!alt) throw new Error(`${this.config.fleet.active.label || this.config.fleet.active.name} 已被删除，且没有别的可用机器；到「仪表盘」换一台，或把它从 GPU_BOXES 里去掉`);
+          inst = this.config.compshare; cloud = "Starting";
+        }
+        else if (cloud === "Stopped") {
           onProgress("正在调用 CompShare 开机…");
           try { await this.cs.start(inst.instanceId, { region: inst.region, zone: inst.zone }); }
           catch (e) {
@@ -234,6 +241,7 @@ export class Power {
       onProgress(`${from} 没有空闲的卡，改试 ${b.label || b.name}…`);
       try {
         const st = await this.cs.state(b.instanceId, { region: b.region });
+        if (st === "NotFound") { onProgress(`${b.name} 云上已不存在，跳过`); continue; }
         if (st !== "Stopped" && st !== "Running") { onProgress(`${b.name} 状态 ${st}，跳过`); continue; }
         if (st === "Stopped") await this.cs.start(b.instanceId, { region: b.region, zone: b.zone });
         this.config.useBox(b.name);

@@ -3,21 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "GPU workbench: one rented card, four capabilities (MiniMax-H3 video / white model / voice / local LLM), arbitrated by VRAM and powered on demand.",
+  "description": "MiniMax-H3 video creation studio: passkey-protected web app that drives a ComfyUI H3 GPU through the atelier.example.com reverse tunnel",
   "license": "MIT",
-  "bin": {
-    "atelier": "bin/atelier",
-    "h3studio": "bin/h3studio"
-  },
+  "bin": { "atelier": "bin/atelier", "h3studio": "bin/h3studio" },
   "scripts": {
     "start": "node server/src/index.js",
     "dev": "node --watch server/src/index.js",
     "test": "node --test \"test/*.test.mjs\"",
     "check": "for f in server/src/*.js; do node --check \"$f\" || exit 1; done"
   },
-  "engines": {
-    "node": ">=22.12.0"
-  },
+  "engines": { "node": ">=22.12.0" },
   "dependencies": {
     "@simplewebauthn/browser": "14.0.0",
     "@simplewebauthn/server": "14.0.0",

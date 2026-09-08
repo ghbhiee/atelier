@@ -30,7 +30,7 @@ HOSTNAME_=$(envget GPU_HOST_PREFIX); [ -n "$HOSTNAME_" ] || HOSTNAME_=gpu
 # the tunnel target is 13 itself; read it from the env rather than hoping the shell already has it
 PUBLIC_ORIGIN=$(envget PUBLIC_ORIGIN); TUNHOST=${PUBLIC_ORIGIN#https://}; TUNHOST=${TUNHOST#http://}; TUNHOST=${TUNHOST%%/*}
 [ -n "$TUNHOST" ] || { echo "PUBLIC_ORIGIN missing from $ENVF"; exit 1; }
-DOMAIN=$(envget GODADDY_DOMAIN); [ -n "$DOMAIN" ] || DOMAIN=example.com
+DOMAIN=$(envget GODADDY_DOMAIN); [ -n "$DOMAIN" ] || DOMAIN=atelier.example.com
 DNSNAME="${HOSTNAME_}-${BOX}.${DOMAIN}"
 [ "$BOX" = huabei ] && DNSNAME="${HOSTNAME_}.${DOMAIN}"
 

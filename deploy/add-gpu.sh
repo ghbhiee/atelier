@@ -15,7 +15,7 @@
 # 密码只在第一次用来把钥匙送进去；之后全走密钥。幂等，重复跑没关系。
 #
 # 做完这些：钥匙 → 反向隧道 → gpuctl/白模节点/素材服务 → 车队隧道 → ComfyUI + 权重软链 → 登记进 env。
-# 实测耗时约 4–6 分钟，绝大部分是 pip 和 ComfyUI 的 tar 包。
+# 实测耗时：只装视频/白模约 4–6 分钟；连大模型和语音一起装要久一些（llama.cpp 可能要编译）。
 set -eu
 BOX=${1:?名字，例如 shanghai}
 LOGIN_RAW=${2:?CompShare 显示的 ssh 命令，带引号}
@@ -55,6 +55,14 @@ grep -q "^GPU_${UP}_PORTBASE=" "$ENVF" || {
 say "provision（隧道 + gpuctl + 素材服务 + 证书）"
 sh "$SRC/deploy/provision-gpu.sh" "$BOX" "$LOGIN" "$BASE"
 
+# 3.5) 有供体就直接克隆环境，别再装一遍
+# DONOR='ssh -p 24123 root@cpod-A.podtcp.compshare.cn' sh deploy/add-gpu.sh …
+# GPU→GPU 是国内直传（MB/s 级），比在新机器上重新解析依赖快，也不会再撞到版本漂移。
+if [ -n "${DONOR:-}" ]; then
+  say "从供体克隆环境（llama.cpp / 语音 / ComfyUI）"
+  sh "$SRC/deploy/clone-env.sh" "$DONOR" "$LOGIN_RAW" all || echo "  ! 克隆没成，退回逐个安装"
+fi
+
 # 4) 缺什么补什么：ffmpeg（pod 镜像常常没有，素材服务一收文件就崩）
 say "ffmpeg / ffprobe"
 remote 'bash /root/atelier-gpu/install-ffmpeg.sh' 2>&1 | tail -2
@@ -63,7 +71,15 @@ remote 'bash /root/atelier-gpu/install-ffmpeg.sh' 2>&1 | tail -2
 say "ComfyUI + 权重"
 remote 'bash /root/atelier-gpu/install-comfyui.sh' 2>&1 | tail -3
 
-# 6) 等它真的能应答
+# 6) 另外两个能力：大模型与语音。之前只装视频/白模，切过去才发现另外两个用不了。
+say "llama.cpp（大模型）"
+# 13 上有编好的就走缓存（经隧道几十秒），没有才在盒子上编（20–40 分钟）
+CACHE_URL="http://127.0.0.1:$(envget PORT || echo 18790)$(envget BASE_PATH)/_fleet/cache/llama-cuda-sm120.tgz"
+remote "LLAMA_CACHE_URL='$CACHE_URL' bash /root/atelier-gpu/install-llm.sh" 2>&1 | tail -3 || echo "  ! 大模型没装上，这台只能做视频/白模"
+say "语音栈（IndexTTS-2 + SenseVoice）"
+remote 'bash /root/atelier-gpu/install-voice.sh' 2>&1 | tail -3 || echo "  ! 语音没装上"
+
+# 7) 等它真的能应答
 say "等 ComfyUI 起来"
 i=0
 while [ $i -lt 60 ]; do

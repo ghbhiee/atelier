@@ -93,7 +93,7 @@ export function installApi(app, ctx) {
   api.get("/passkeys", wrap(async (_req, res) => res.json(await passkeys.list())));
   // ---- model manager --------------------------------------------------------------------
   api.get("/models", wrap(async (_req, res) => res.json(await ctx.models.snapshot())));
-  api.post("/models/refresh", wrap(async (_req, res) => { await ctx.models.refresh(); res.json(await ctx.models.snapshot()); }));
+  api.post("/models/refresh", wrap(async (_req, res) => { await ctx.models.refresh(); await ctx.models.probeWeights().catch(() => {}); res.json(await ctx.models.snapshot()); }));
   api.post("/models/task", express.json(), wrap(async (req, res) => {
     const c = await ctx.models.catalog(); const t = c.tasks[req.body?.task]; if (!t) throw new Error("未知任务");
     ctx.models.ensure(t.modality, req.body?.modelId || t.default, () => {}).catch((e) => events.emitAll("toast", { level: "error", text: "加载失败：" + e.message }));
@@ -125,7 +125,7 @@ export function installApi(app, ctx) {
   }));
   api.post("/models/:id/test", wrap(async (req, res) => res.json(await ctx.models.test(req.params.id))));
   api.post("/models/:id/download", wrap(async (req, res) => res.json(await ctx.models.download(req.params.id))));
-  api.patch("/models/:id", express.json(), wrap(async (req, res) => { const allowed = {}; for (const k of ["tested", "note", "vram", "args"]) if (k in (req.body || {})) allowed[k] = req.body[k]; await ctx.models.setOverride(req.params.id, allowed); res.json(await ctx.models.model(req.params.id)); }));
+  api.patch("/models/:id", express.json(), wrap(async (req, res) => { const allowed = {}; for (const k of ["tested", "note", "vram", "args", "hidden", "ctxPin"]) if (k in (req.body || {})) allowed[k] = req.body[k]; await ctx.models.setOverride(req.params.id, allowed); res.json(await ctx.models.model(req.params.id)); }));
   api.get("/models/log/:prog", wrap(async (req, res) => res.json(await ctx.gpuctl.log(req.params.prog, Math.min(400, Number(req.query.lines) || 60)))));
   // Storage & cleanup (dry-run plan, then clean with the same rules)
   api.get("/storage", wrap(async (_req, res) => res.json(await ctx.storage.overview())));
@@ -420,6 +420,7 @@ export function installApi(app, ctx) {
       active: b.name === active,
       state: b.name === active ? gpu.state : "unknown",
       cloudState: await cloudStateOf(b),
+      gone: (await cloudStateOf(b)) === "NotFound",   // 云上已删除：别再让人选它
       configured: !!b.instanceId,
     })));
     res.json({ active, boxes });
@@ -613,6 +614,18 @@ export function installApi(app, ctx) {
     const v = ctx.direct?.takeLent(req.params.token);
     if (!v) return res.status(404).json({ error: "过期或不存在" });
     res.sendFile(v.file, { headers: { "content-type": "application/octet-stream" } }, (e) => { if (e && !res.headersSent) res.status(500).end(); });
+  });
+  // Build artefacts a GPU box pulls through the fleet tunnel instead of compiling itself.
+  // llama.cpp has no prebuilt Linux CUDA release any more, and compiling it on a fresh pod means
+  // 20–40 minutes plus a fight with whatever toolchain the image happens to ship. So we build once,
+  // keep the binary here, and every later box fetches it over the tunnel in about a minute.
+  app.get("/_fleet/cache/:name", (req, res) => {
+    const ip = req.socket.remoteAddress || "";
+    if (!/^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ip)) return res.status(403).end();
+    if (!/^[a-z0-9][a-z0-9._-]{0,60}$/i.test(req.params.name)) return res.status(400).end();
+    const f = path.join(config.dataDir, "cache", req.params.name);
+    if (!fs.existsSync(f)) return res.status(404).json({ error: "缓存里没有 " + req.params.name });
+    res.sendFile(f);
   });
   // Loopback-only endpoints for the operator CLI (shares the daemon's in-memory prompt index).
   app.post("/internal/prompts/sync", express.json(), wrap(async (req, res) => {

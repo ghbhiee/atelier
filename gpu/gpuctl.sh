@@ -80,6 +80,10 @@ print(json.dumps(sorted(out)))'
 
 cmd=${1:-status}; shift || true
 case "$cmd" in
+  have)
+    # 哪些权重文件真的在这台机器上：共享盘各区内容不一样，13 不能假设目录里写的路径都存在
+    python3 -c 'import json,os,sys; print(json.dumps({p: os.path.exists(p) for p in sys.argv[1:]}))' "$@"
+    ;;
   status)
     printf '{"ok":true,"vram":%s,"procs":%s,"programs":%s,"ports":%s,"net":%s,"disk_free_gb":%s,"uptime_s":%s,"cache":%s,"runners":%s}\n' \
       "$(vram)" "$(procs)" "$(programs)" "$(ports)" "$(net)" \

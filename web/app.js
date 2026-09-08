@@ -240,8 +240,8 @@ routes.dash = async (main) => {
     const nameOf = (id) => ms.models.find((m) => m.id === id)?.name || id;
     const short = (n) => String(n).split("（")[0].split(" · ")[0].slice(0, 16);
     const chips = [];
-    if (ms.loaded.video) chips.push(h("span", { class: "badge " + (ms.comfyModelsLoaded ? "on" : "") }, ms.comfyModelsLoaded ? "🎬 H3 权重在显存" : "🎬 ComfyUI 空载"));
-    for (const mod of ["llm", "voice"]) if (ms.loaded[mod]) chips.push(h("span", { class: "badge on" }, `${MOD_ICON[mod]} ${nameOf(ms.loaded[mod].modelId || "?")}`));
+    if (ms.loaded.video) chips.push(h("span", { class: "badge " + (ms.comfyModelsLoaded ? "on" : "") }, ms.comfyModelsLoaded ? "H3 权重在显存" : "ComfyUI 空载"));
+    for (const mod of ["llm", "voice"]) if (ms.loaded[mod]) chips.push(h("span", { class: "badge on" }, nameOf(ms.loaded[mod].modelId || "?")));
     const busy = ms.busy;
     const taskBtn = (label, modality, on, title) => h("button", { class: "sm" + (on ? " primary" : ""), disabled: !!busy, title, onclick: async () => { try { await api("/models/ensure", { method: "POST", body: { modality } }); toast(`正在准备「${label}」…`, "info"); } catch (e) { toast(e.message, "error"); } } }, label);
     const d = ms.defaults || {};
@@ -251,9 +251,9 @@ routes.dash = async (main) => {
       h("div", { class: "muted small" }, g ? `显存 ${(used / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} G` : "开机后显示显存"),
       busy ? h("div", { class: "hint", style: "margin-top:6px" }, h("span", { class: "spin" }), ` ${busy.action === "load" ? "加载" : "卸载"} ${ms.modalities[busy.modality]?.label || busy.modality}：${busy.progress.at(-1)?.text || "…"}`) : null,
       h("div", { class: "row", style: "gap:6px;flex-wrap:wrap;margin-top:8px" },
-        taskBtn(`🎬 视频 · ${short(nameOf(d.video || "h3"))}`, "video", !!ms.loaded.video && ms.comfyModelsLoaded, "把默认视频模型装进显存（会卸掉大模型 / 语音）"),
-        taskBtn(`💬 大模型 · ${short(nameOf(d.llm || ""))}`, "llm", ms.loaded.llm?.modelId && ms.loaded.llm.modelId === d.llm, "加载默认大模型（会卸掉 H3 权重）；在「模型管家」里换默认"),
-        taskBtn(`🎙 语音 · ${short(nameOf(d.voice || ""))}`, "voice", !!ms.loaded.voice, "加载默认语音模型（转写的 SenseVoice 随语音服务一起起来）"),
+        taskBtn(`视频 · ${short(nameOf(d.video || "h3"))}`, "video", !!ms.loaded.video && ms.comfyModelsLoaded, "把默认视频模型装进显存（会卸掉大模型 / 语音）"),
+        taskBtn(`大模型 · ${short(nameOf(d.llm || ""))}`, "llm", ms.loaded.llm?.modelId && ms.loaded.llm.modelId === d.llm, "加载默认大模型（会卸掉 H3 权重）；在「模型管家」里换默认"),
+        taskBtn(`语音 · ${short(nameOf(d.voice || ""))}`, "voice", !!ms.loaded.voice, "加载默认语音模型（转写的 SenseVoice 随语音服务一起起来）"),
         h("button", { class: "sm danger", disabled: !!busy || (!ms.loaded.llm && !ms.loaded.voice && !ms.comfyModelsLoaded), onclick: async () => { try { ms = S.models = await api("/models/unload", { method: "POST", body: { modality: "all" } }); drawModels(); toast("已全部卸载", "ok"); } catch (e) { toast(e.message, "error"); } } }, "全部卸载")));
   }
   drawModels(); listen("models", (e) => { ms = S.models = e.detail; drawModels(); });
@@ -282,8 +282,8 @@ routes.dash = async (main) => {
             // used to switch the fleet underneath you.
             const live = g.box?.name || S.boxes.active;
             S.viewBox = S.boxes.boxes.some((b) => b.name === S.viewBox) ? S.viewBox : live;
-            const list = S.boxes.boxes.filter((b) => b.configured);
-            const cloudZh = (c) => ({ Running: "云上在跑", Stopped: "云上已关机", Starting: "云上开机中", Stopping: "云上关机中" })[c] || (c || "状态未知");
+            const list = S.boxes.boxes.filter((b) => b.configured && !b.gone);
+            const cloudZh = (c) => ({ Running: "云上在跑", Stopped: "云上已关机", Starting: "云上开机中", Stopping: "云上关机中", NotFound: "云上已删除" })[c] || (c || "状态未知");
             const sel = h("select", { class: "sm", style: "max-width:190px" },
               list.map((b) => h("option", { value: b.name, selected: b.name === S.viewBox },
                 `${b.label || b.name}${b.name === live ? "（当前）" : ""} · ${cloudZh(b.cloudState)}`)));
@@ -722,7 +722,7 @@ function promptTools(textarea, { mode = () => "", h3Only = () => true } = {}) {
   panel.append(h("div", { class: "row between" }, status, h("div", { class: "row" }, h("label", { class: "inline small" }, h3cb, "只看 MiniMax H3"), h("label", { class: "inline small" }, h("input", { type: "checkbox", checked: true, onchange: (e) => { auto = e.target.checked; } }), "边写边匹配"), h("button", { class: "sm ghost", onclick: () => search(true) }, "刷新"))), list);
   // 「从库插入」去掉了：OpenPrompt 推荐就在下面，要翻自己的库直接去「提示词」页搜。
   const bar = h("div", { class: "row", style: "margin-top:6px" },
-    h("button", { class: "primary", onclick: () => saveToLibrary({ text: getText(), mode: mode() }) }, "💾 保存提示词"),
+    h("button", { class: "primary", onclick: () => saveToLibrary({ text: getText(), mode: mode() }) }, "保存提示词"),
     toggle);
   // 参考链接放最下面，用链接不用按钮
   const links = h("p", { class: "muted small", style: "margin-top:10px" }, "参考：",
@@ -790,7 +790,7 @@ routes.generate = async (main, arg) => {
   const refsMeta = () => [...st.images.map((id, i) => ({ kind: "image", index: i + 1, id })), ...st.videos.map((id, i) => ({ kind: "video", index: i + 1, id }))];
   left.append(
     h("div", { class: "card" }, h("div", { class: "row between" }, h("h2", null, "模式"), h("label", { class: "inline" }, "项目 ", projEl)), modeBox, h("div", { style: "height:10px" }), refsBox),
-    h("div", { class: "card" }, h("div", { class: "row between" }, h("h2", null, "提示词"), h("div", { class: "row" }, h("button", { class: "sm", onclick: insertTpl }, "插入模板"), h("button", { class: "sm", onclick: () => { if (st.mode !== "video") { st.mode = "video"; drawModes(); drawRefs(); } if (promptEl.value.trim() && !confirmSync("覆盖当前提示词？")) return; promptEl.value = TPL.continue; st.prompt = TPL.continue; } }, "续接模板"), h("button", { class: "sm", onclick: () => llmAssist({ mode: st.mode === "video" ? "swap" : st.mode, seconds: Number(secEl.value), refs: refsMeta(), existing: promptEl.value, onResult: (t) => { promptEl.value = t; st.prompt = t; } }) }, "✨ AI 助手"), h("button", { class: "sm", title: "在现有内容上按你的新要求改写，其余原样保留", onclick: () => llmRewrite({ current: promptEl.value, mode: st.mode === "video" ? "swap" : st.mode, seconds: Number(secEl.value), onResult: (t) => { promptEl.value = t; st.prompt = t; } }) }, "✏️ AI 改写"))), promptEl, promptTools(promptEl, { mode: () => st.mode === "video" ? "edit" : st.mode }), h("div", { class: "hint" }, "台词写 <d>[Chinese] …</d>，5 秒放 1–2 句；相机不动要明说 The camera holds a static shot；不要配乐写 non_diegetic_music: N/A。")));
+    h("div", { class: "card" }, h("div", { class: "row between" }, h("h2", null, "提示词"), h("div", { class: "row" }, h("button", { class: "sm", onclick: insertTpl }, "插入模板"), h("button", { class: "sm", onclick: () => { if (st.mode !== "video") { st.mode = "video"; drawModes(); drawRefs(); } if (promptEl.value.trim() && !confirmSync("覆盖当前提示词？")) return; promptEl.value = TPL.continue; st.prompt = TPL.continue; } }, "续接模板"), h("button", { class: "sm", onclick: () => llmAssist({ mode: st.mode === "video" ? "swap" : st.mode, seconds: Number(secEl.value), refs: refsMeta(), existing: promptEl.value, onResult: (t) => { promptEl.value = t; st.prompt = t; } }) }, "AI 助手"), h("button", { class: "sm", title: "在现有内容上按你的新要求改写，其余原样保留", onclick: () => llmRewrite({ current: promptEl.value, mode: st.mode === "video" ? "swap" : st.mode, seconds: Number(secEl.value), onResult: (t) => { promptEl.value = t; st.prompt = t; } }) }, "AI 改写"))), promptEl, promptTools(promptEl, { mode: () => st.mode === "video" ? "edit" : st.mode }), h("div", { class: "hint" }, "台词写 <d>[Chinese] …</d>，5 秒放 1–2 句；相机不动要明说 The camera holds a static shot；不要配乐写 non_diegetic_music: N/A。")));
   const adviceBox = h("div", { style: "margin-top:6px" });
   let adviceTimer = null;
   async function refreshAdvice() {
@@ -830,7 +830,7 @@ routes.generate = async (main, arg) => {
     h("label", null, "加速 LoRA"), loraEl,
     h("label", null, "标题"), titleEl, estEl,
     h("details", { style: "margin-top:8px" }, h("summary", { class: "muted small" }, "批量生成（seed 扫描 / 提示词变体）"), h("label", { class: "inline", style: "margin-top:6px" }, batchOn, "启用批量"), h("label", null, "每个提示词跑几个 seed"), batchCount, h("label", null, "提示词变体"), batchVariants, h("p", { class: "hint" }, "一次最多 48 条，完成后在「任务」页按组查看对照表。")),
-    h("button", { class: "primary", style: "width:100%;margin-top:12px;padding:12px", onclick: submit }, "🎬 生成"),
+    h("button", { class: "primary", style: "width:100%;margin-top:12px;padding:12px", onclick: submit }, "生成"),
     h("div", { class: "hint" }, S.gpu?.state === "off" ? "GPU 当前关机，提交后会自动开机（约 2 分钟）再生成。" : "")));
   const qcard = h("div", { class: "card" });
   right.append(qcard);
@@ -932,7 +932,7 @@ routes.project = async (main, id, tab = "clips", sub = "") => {
   }
   function assetDetail(a) {
     const url = `api/projects/${p.id}/assets/${a.id}/file`;
-    const media = a.kind === "video" ? h("video", { class: "player", src: url, controls: true }) : a.kind === "audio" ? h("div", null, h("img", { src: `api/projects/${p.id}/assets/${a.id}/thumb`, style: "width:100%;border-radius:8px" }), h("audio", { src: url, controls: true, style: "width:100%;margin-top:8px" })) : h("img", { src: url, style: "max-width:100%;max-height:60vh;border-radius:8px;display:block;margin:auto" });
+    const media = a.kind === "video" ? h("video", { class: "player", src: url, controls: true }) : a.kind === "audio" ? h("div", null, h("img", { src: `api/projects/${p.id}/assets/${a.id}/thumb`, style: "width:100%;border-radius:8px" }), audioPlayer({ src: url })) : h("img", { src: url, style: "max-width:100%;max-height:60vh;border-radius:8px;display:block;margin:auto" });
     const acts = h("div", { class: "row", style: "margin-top:10px" });
     const rm = () => m.close();
     acts.append(h("button", { class: "sm", onclick: () => { const n = prompt("重命名", a.name); if (n) api(`/projects/${p.id}/assets/${a.id}`, { method: "PATCH", body: { name: n } }).then(() => { rm(); reload().then(drawAssets); }); } }, "重命名"),
@@ -1056,7 +1056,7 @@ routes.project = async (main, id, tab = "clips", sub = "") => {
         h("button", { class: "primary", onclick: async () => { await saveClip(); const j = await api(`/projects/${p.id}/clips/${c.id}/generate`, { method: "POST", body: {} }); toast(`已排队 take ${j.take}`, "ok"); await reload(); drawClips(); } }, `🎬 生成 take ${c.takes.length + 1}`),
         h("button", { onclick: () => saveClip().then(() => toast("已保存", "ok", 1500)).catch((e) => toast(e.message, "error")) }, "保存"),
         h("button", { onclick: async () => { await saveClip(); const r = await api(`/projects/${p.id}/clips/${c.id}/prompt`); modal("最终提示词 · " + c.title, h("div", null, h("pre", null, r.prompt), h("div", { class: "muted small" }, `参数：${JSON.stringify(r.params)}`)), { actions: [{ label: "复制", onclick: () => { copy(r.prompt); return false; } }, { label: "关闭" }] }); } }, "预览提示词"),
-        h("button", { onclick: () => llmAssist({ mode: (c.workflow || p.settings.workflow) === "native_ref2va" ? ((c.videos || []).length ? "swap" : "ref") : (c.workflow || p.settings.workflow) === "native_i2v" ? "i2v" : "t2v", seconds: Number(f.seconds.value || p.settings.seconds), refs: [...(c.refs && c.refs.length ? c.refs : p.refs).map((id, i) => ({ kind: "image", index: i + 1, id, desc: p.assets.find((a) => a.id === id)?.name })), ...(c.videos || []).map((id, i) => ({ kind: "video", index: i + 1, id, desc: p.assets.find((a) => a.id === id)?.name }))], existing: f.prompt.value || (f.summary.value + "\n" + f.shot.value), onResult: (t) => { f.prompt.value = t; toast("已写入「完全自定义提示词」，可在其中拆回 summary/shot", "ok"); } }) }, "✨ AI 助手"),
+        h("button", { onclick: () => llmAssist({ mode: (c.workflow || p.settings.workflow) === "native_ref2va" ? ((c.videos || []).length ? "swap" : "ref") : (c.workflow || p.settings.workflow) === "native_i2v" ? "i2v" : "t2v", seconds: Number(f.seconds.value || p.settings.seconds), refs: [...(c.refs && c.refs.length ? c.refs : p.refs).map((id, i) => ({ kind: "image", index: i + 1, id, desc: p.assets.find((a) => a.id === id)?.name })), ...(c.videos || []).map((id, i) => ({ kind: "video", index: i + 1, id, desc: p.assets.find((a) => a.id === id)?.name }))], existing: f.prompt.value || (f.summary.value + "\n" + f.shot.value), onResult: (t) => { f.prompt.value = t; toast("已写入「完全自定义提示词」，可在其中拆回 summary/shot", "ok"); } }) }, "AI 助手"),
         h("button", { class: "danger", style: "margin-left:auto", onclick: async () => { if (await confirm(`删除片段 ${c.title}？（已生成的 take 保留在任务列表）`, { danger: true })) { await api(`/projects/${p.id}/clips/${c.id}`, { method: "DELETE" }); await reload(); drawClips(); } } }, "删除片段")),
       h("div", { class: "row between", style: "margin-top:12px" }, h("h3", { style: "margin:0" }, "Takes"), h("div", { class: "row" },
         h("button", { class: "sm", disabled: !c.takes.length, title: "抽出选用 take 的末帧，作为下一段的首帧（i2v）", onclick: async () => { try { const nc = await api(`/projects/${p.id}/clips/${c.id}/continue`, { method: "POST", body: { mode: "frame" } }); open.add(nc.id); toast(`已创建「${nc.title}」，首帧 = 本段末帧`, "ok"); await reload(); drawClips(); } catch (e) { toast(e.message, "error"); } } }, "续接下一段：末帧作首帧"),
@@ -1163,11 +1163,11 @@ routes.project = async (main, id, tab = "clips", sub = "") => {
           h("button", { class: "sm primary", disabled: a.auto || !a.segments.some((s) => !s.jobs.length), onclick: async () => { try { await api(`/projects/${p.id}/avatars/${a.id}/generate-all`, { method: "POST" }); toast("链式生成已开始，每段完成后自动接下一段", "ok"); await reload(); drawAvatars(); } catch (e) { toast(e.message, "error"); } } }, a.auto ? "链式生成中…" : "生成全部（链式）"),
           h("button", { class: "sm", disabled: done < a.segments.length, onclick: async () => { prog.textContent = "开始…"; try { await api(`/projects/${p.id}/avatars/${a.id}/assemble`, { method: "POST", body: {} }); prog.textContent = ""; await reload(); location.hash = `#/project/${p.id}/renders`; } catch (e) { prog.textContent = ""; toast(e.message, "error"); } } }, `🎞 拼接成片 (${done}/${a.segments.length})`),
           h("button", { class: "sm danger", onclick: async () => { if (await confirm("删除这个数字人任务？（take 保留在任务列表）", { danger: true })) { await api(`/projects/${p.id}/avatars/${a.id}`, { method: "DELETE" }); curAvatar = null; await reload(); drawAvatars(); } } }, "删除"))), prog,
-      h("audio", { src: `api/projects/${p.id}/assets/${a.audio}/file`, controls: true, style: "width:100%;margin-top:8px" })));
+      audioPlayer({ src: `api/projects/${p.id}/assets/${a.audio}/file`, style: "margin-top:8px" })));
     const tbl = h("table", { style: "margin-top:12px" }, h("tr", null, h("th", null, "#"), h("th", null, "时间"), h("th", null, "帧"), h("th", null, "锚定"), h("th", null, "Takes"), h("th", null, "")));
     for (const s of a.segments) tbl.append(h("tr", null, h("td", null, s.index + 1), h("td", { class: "mono small" }, `${s.start.toFixed(2)}–${s.end.toFixed(2)}`, h("br"), `${s.duration.toFixed(2)}s`), h("td", { class: "mono small" }, `${s.frames}`), h("td", null, s.anchor ? h("img", { src: `api/projects/${p.id}/assets/${s.anchor}/thumb`, style: "width:64px;border-radius:4px", title: "本段末帧（下一段的构图锚）" }) : h("span", { class: "muted small" }, "—")),
       h("td", null, h("div", { class: "takes", id: `atakes-${a.id}-${s.index}`, style: "margin:0" })),
-      h("td", null, h("div", { class: "col", style: "gap:4px" }, h("button", { class: "sm" + (s.jobs.length ? "" : " primary"), onclick: async () => { try { await api(`/projects/${p.id}/avatars/${a.id}/segments/${s.index}/generate`, { method: "POST", body: {} }); toast(`已排队第 ${s.index + 1} 段`, "ok"); await reload(); drawAvatars(); } catch (e) { toast(e.message, "error"); } } }, s.jobs.length ? "重拍" : "生成"), h("button", { class: "sm ghost", onclick: async () => { const r = await api(`/projects/${p.id}/avatars/${a.id}/segments/${s.index}/prompt`); modal(`第 ${s.index + 1} 段提示词`, h("pre", null, r.prompt)); } }, "提示词"), h("audio", { src: `api/projects/${p.id}/assets/${s.audioAsset}/file`, controls: true, style: "width:150px;height:28px" })))));
+      h("td", null, h("div", { class: "col", style: "gap:4px" }, h("button", { class: "sm" + (s.jobs.length ? "" : " primary"), onclick: async () => { try { await api(`/projects/${p.id}/avatars/${a.id}/segments/${s.index}/generate`, { method: "POST", body: {} }); toast(`已排队第 ${s.index + 1} 段`, "ok"); await reload(); drawAvatars(); } catch (e) { toast(e.message, "error"); } } }, s.jobs.length ? "重拍" : "生成"), h("button", { class: "sm ghost", onclick: async () => { const r = await api(`/projects/${p.id}/avatars/${a.id}/segments/${s.index}/prompt`); modal(`第 ${s.index + 1} 段提示词`, h("pre", null, r.prompt)); } }, "提示词"), audioPlayer({ src: `api/projects/${p.id}/assets/${s.audioAsset}/file` })))));
     body.append(h("div", { class: "card", style: "margin-top:12px" }, h("h3", null, "分段"), tbl));
     drawAvatarTakes(a.id);
     function newAvatar() { editAvatar({ name: "", face: null, audio: null, settings: { width: 640, height: 736, seed: 8100, steps: 8, style: "natural", anchor: true }, prompt: { desc: "", scene: "a softly lit neutral studio background", language: "Chinese" }, maxLen: 14.8 }, true); }
@@ -1355,11 +1355,11 @@ routes.prompts = async (main, tab = "open") => {
           num.onkeydown = (e) => { if (e.key === "Enter") go(); };
           num.onchange = go;
           pager.append(
-            h("button", { class: "sm", disabled: f.page <= 1, onclick: () => { f.page = 1; run(); } }, "« 首页"),
+            h("button", { class: "sm", disabled: f.page <= 1, onclick: () => { f.page = 1; run(); } }, "首页"),
             h("button", { class: "sm", disabled: f.page <= 1, onclick: () => { f.page--; run(); } }, "上一页"),
             h("span", { class: "row", style: "gap:4px;align-items:center" }, h("span", { class: "muted small" }, "第"), num, h("span", { class: "muted small" }, `/ ${last} 页`)),
             h("button", { class: "sm", disabled: f.page * PAGE >= r.total, onclick: () => { f.page++; run(); } }, "下一页"),
-            h("button", { class: "sm", disabled: f.page >= last, onclick: () => { f.page = last; run(); } }, "末页 »"));
+            h("button", { class: "sm", disabled: f.page >= last, onclick: () => { f.page = last; run(); } }, "末页"));
         }
       }
       info.textContent = `${modeLabel} · ${total} 条`;
@@ -1435,7 +1435,7 @@ function refThumb(projectId, assetId, label) {
     const url = `api/projects/${projectId}/assets/${assetId}/file`;
     let a = null; try { a = (await api(`/projects/${projectId}`)).assets.find((x) => x.id === assetId); } catch {}
     if (!a) return toast("素材已不存在", "warn");
-    modal(a.name, h("div", null, a.kind === "video" ? h("video", { class: "player", src: url, controls: true, autoplay: true }) : a.kind === "audio" ? h("div", null, h("img", { src: `api/projects/${projectId}/assets/${assetId}/thumb`, style: "width:100%;border-radius:8px" }), h("audio", { src: url, controls: true, autoplay: true, style: "width:100%;margin-top:8px" })) : h("img", { src: url, style: "max-width:100%;max-height:70vh;border-radius:8px;display:block;margin:auto" }), h("div", { class: "muted small", style: "margin-top:6px" }, `${label} · ${a.width || ""}${a.height ? "×" + a.height : ""}${a.duration ? " · " + a.duration + "s" : ""}`), h("div", { class: "row", style: "margin-top:8px" }, h("a", { class: "btn sm", href: url + "?download=1" }, "下载"), h("a", { class: "btn sm", href: `#/project/${projectId}/assets` }, "去素材页"))));
+    modal(a.name, h("div", null, a.kind === "video" ? h("video", { class: "player", src: url, controls: true, autoplay: true }) : a.kind === "audio" ? h("div", null, h("img", { src: `api/projects/${projectId}/assets/${assetId}/thumb`, style: "width:100%;border-radius:8px" }), audioPlayer({ src: url })) : h("img", { src: url, style: "max-width:100%;max-height:70vh;border-radius:8px;display:block;margin:auto" }), h("div", { class: "muted small", style: "margin-top:6px" }, `${label} · ${a.width || ""}${a.height ? "×" + a.height : ""}${a.duration ? " · " + a.duration + "s" : ""}`), h("div", { class: "row", style: "margin-top:8px" }, h("a", { class: "btn sm", href: url + "?download=1" }, "下载"), h("a", { class: "btn sm", href: `#/project/${projectId}/assets` }, "去素材页"))));
   } }, h("img", { src: `api/projects/${projectId}/assets/${assetId}/thumb`, onerror: (e) => { e.target.style.opacity = .2; } }), h("span", { class: "lbl" }, label));
 }
 /** Where the time went, and what the card was doing while it went there. */
@@ -1477,7 +1477,13 @@ async function jobDetail(id) {
         j.advice.map((a) => h("div", { class: a.level === "error" ? "errbox" : a.level === "warn" ? "warn" : "hint", style: "margin-top:4px" }, a.text, a.fix ? h("div", { class: "muted small" }, a.fix) : null))) : null,
       stageTable(j),
       j.refCheck ? h("div", { class: "muted small", style: "margin-top:4px" }, `节点收到的参考键：${j.refCheck.received.join(", ") || "无"}（期望 ${j.refCheck.expected}）`) : null,
-      h("div", { class: "row", style: "margin-top:10px" },
+      // 任务详情里看不到提示词是说不过去的：这是复盘一条片子最先要看的东西
+      j.prompt ? h("details", { style: "margin-top:8px" }, h("summary", { class: "small" }, "提示词"),
+        h("pre", { style: "max-height:32vh;margin-top:6px" }, j.prompt),
+        h("div", { class: "actions", style: "margin-top:6px" },
+          h("button", { class: "sm", onclick: () => copy(j.prompt) }, "复制"),
+          h("button", { class: "sm", onclick: () => { S.clone = { mode: j.workflow === "native_t2v" ? "t2v" : j.workflow === "native_i2v" ? "i2v" : j.videos?.length ? "video" : "ref", projectId: j.projectId, images: [], videos: [], prompt: j.prompt, title: j.title }; location.hash = "#/generate/clone"; } }, "拿去改一版"))) : null,
+      h("div", { class: "actions", style: "margin-top:12px" },
         isActive(j) ? h("button", { class: "sm danger", onclick: () => api(`/jobs/${j.id}/cancel`, { method: "POST" }).then(() => toast("已取消")).catch((e) => toast(e.message, "error")) }, "取消") : null,
         j.output ? h("a", { class: "btn sm", href: `api/jobs/${j.id}/file?download=1` }, "下载") : null,
         j.output && S.meta.fileshare ? h("button", { class: "sm", onclick: () => api(`/jobs/${j.id}/share`, { method: "POST", body: {} }).then((r) => { j.share = r; draw(); copy(r.url); }).catch((e) => toast(e.message, "error")) }, "分享链接") : null,
@@ -1488,8 +1494,8 @@ async function jobDetail(id) {
         j.output ? h("button", { class: "sm", onclick: async () => { try { const a = await api(`/jobs/${j.id}/clone-to-asset`, { method: "POST", body: {} }); S.clone = { mode: "video", projectId: j.projectId, images: j.workflow === "native_ref2va" ? j.images : [], lastFrame: null, videos: [a.id], videoAudio: false, width: j.width, height: j.height, seconds: j.seconds, steps: null, seed: "", refSize: j.refSize, prompt: TPL.continue, title: `${j.title} · 续(视频)` }; m.close(); location.hash = "#/generate/clone"; } catch (e) { toast(e.message, "error"); } } }, "续接：视频续接") : null,
         h("button", { class: "sm", onclick: () => { S.clone = { mode: j.workflow === "native_t2v" ? "t2v" : j.workflow === "native_i2v" ? "i2v" : j.videos?.length ? "video" : "ref", projectId: j.projectId, images: j.images, lastFrame: j.lastFrame, videos: j.videos, videoAudio: j.videoAudio, width: j.width, height: j.height, seconds: j.seconds, steps: j.steps, seed: j.seed, refSize: j.refSize, prompt: j.prompt, title: j.title, lora: j.lora || null }; m.close(); location.hash = "#/generate/clone"; } }, "再来一条（复制参数）"),
         !isActive(j) ? h("button", { class: "sm", title: "同参数同 seed 重新排队（用于对比模型/隧道抖动或误删产物）", onclick: async () => { try { const r = await api(`/jobs/${j.id}/rerun`, { method: "POST", body: {} }); toast(`已排队重跑（seed ${r.seed}）`, "ok"); m.close(); jobDetail(r.id); } catch (e) { toast(e.message, "error"); } } }, "重跑（同 seed）") : null,
-        h("button", { class: "sm", onclick: () => copy(j.prompt) }, "复制提示词"),
-        h("button", { class: "sm danger", style: "margin-left:auto", onclick: async () => { if (await confirm("删除任务及产物？", { danger: true })) { await api(`/jobs/${j.id}`, { method: "DELETE" }); m.close(); } } }, "删除")),
+        h("span", { class: "spacer" }),
+        h("button", { class: "sm danger", onclick: async () => { if (await confirm("删除任务及产物？", { danger: true })) { await api(`/jobs/${j.id}`, { method: "DELETE" }); m.close(); } } }, "删除")),
       j.share ? h("pre", { style: "margin-top:8px" }, j.share.url) : null,
       j.output?.strip ? h("img", { src: `api/jobs/${j.id}/strip`, style: "width:100%;border-radius:8px;margin-top:8px" }) : null,
       (j.images.length || j.videos.length || j.lastFrame || (j.audios || []).length) ? h("div", { class: "refs", style: "margin-top:8px" }, j.images.map((a, i) => refThumb(j.projectId, a, j.workflow === "native_i2v" ? "首帧" : `<Picture ${i + 1}>`)), j.lastFrame ? refThumb(j.projectId, j.lastFrame, "尾帧") : null, j.videos.map((a, i) => refThumb(j.projectId, a, `<Video ${i + 1}>${j.videoAudio ? "+音" : ""}`)), (j.audios || []).map((a, i) => refThumb(j.projectId, a, `<Audio ${i + 1}>`))) : null,
@@ -1560,7 +1566,7 @@ routes.whitemodel = async (main) => {
       const j = await api("/jobs", { method: "POST", body: { projectId: st.projectId, workflow: "whitemodel", videos: [st.video.id], title: titleEl.value.trim() || `白模${st.subjectOnly ? "（仅人物）" : ""} · ${st.video.name}`, whitemodel: { preset: st.preset, relief: st.relief, photo: st.photo, ao: st.ao, keepAudio: st.keepAudio , subjectOnly: st.subjectOnly, subjectThreshold: st.subjectThreshold } } });
       toast(`已排队：${j.title}（预计约 ${fmtT(j.estimate)}）`, "ok"); jobDetail(j.id);
     } catch (e) { toast(e.message, "error"); }
-  } }, "🗿 生成白模视频");
+  } }, "生成白模视频");
   left.append(h("div", { class: "card" }, h("h2", null, "1 · 源视频"), h("label", null, "项目"), pSel, srcBox),
     h("div", { class: "card" }, h("h2", null, "2 · 风格"), cards, h("div", { class: "grid g3", style: "margin-top:10px" }, slider("relief", "体积强度 relief", 0, 15, 0.5, "越大浮雕越深；0 = 用预设值"), slider("photo", "五官 / 褶皱 photo", 0, 0.8, 0.05, "把画面明暗当作第二个高度场混入；脸和衣褶靠它"), slider("ao", "明暗对比 ao", 0, 1.5, 0.05, "多尺度凹陷暗化，最像白模的一步")), h("label", { class: "inline", style: "margin-top:8px" }, audioCb, " 保留原声")),
     h("div", { class: "card" }, h("h2", null, "3 · 范围"), subjectBox),
@@ -1572,7 +1578,7 @@ routes.whitemodel = async (main) => {
 };
 
 // ================= Models / compute =================
-const MOD_ICON = { video: "🎬", whitemodel: "🗿", llm: "💬", voice: "🎙" };
+const MOD_ICON = { video: "", whitemodel: "", llm: "", voice: "" };
 /** Context window of an llama.cpp model from its args (-c N) → "256k" etc. */
 /** Weights + KV at the context this model is configured for; "≈" when the KV rate is an estimate. */
 const ctxLabel = (v) => v >= 1024 ? `${Math.round(v / 1024)}k` : String(v);
@@ -1649,7 +1655,7 @@ routes.models = async (main) => {
       const l = snap.loaded[mod]; if (!l && !(mod === "video" && snap.comfyModelsLoaded)) continue;
       const m = l?.modelId ? snap.models.find((x) => x.id === l.modelId) : null;
       const txt = mod === "video" ? (snap.comfyModelsLoaded ? "H3 权重在显存" : "ComfyUI 空载") : (m?.name || def.label);
-      chips.push(h("span", { class: "badge " + (mod === "video" && !snap.comfyModelsLoaded ? "" : "on"), title: def.label }, `${MOD_ICON[mod] || ""} ${txt}`));
+      chips.push(h("span", { class: "badge " + (mod === "video" && !snap.comfyModelsLoaded ? "" : "on"), title: def.label }, txt));
     }
     const busy = snap.busy;
     head.append(h("div", { class: "row between", style: "flex-wrap:wrap;gap:8px" },
@@ -1664,10 +1670,10 @@ routes.models = async (main) => {
     // Capability cards: one per modality — pick the model, load / unload, see what would be evicted.
     tasksCard.innerHTML = "";
     const caps = [
-      { mod: "video", icon: "🎬", title: "视频生成 · MiniMax-H3", desc: "文生 / 图生 / 参考图·视频，出片自带声音" },
-      { mod: "llm", icon: "💬", title: "大模型", desc: "对话 · 写作 · 代码；OpenAI 兼容端点" },
-      { mod: "voice", icon: "🎙", title: "语音", desc: "配音 · 音色克隆 · 转写" },
-      { mod: "whitemodel", icon: "🗿", title: "白模视频", desc: "实拍 → 石膏模型" },
+      { mod: "video", icon: "", title: "视频生成 · MiniMax-H3", desc: "文生 / 图生 / 参考图·视频，出片自带声音" },
+      { mod: "llm", icon: "", title: "大模型", desc: "对话 · 写作 · 代码；OpenAI 兼容端点" },
+      { mod: "voice", icon: "", title: "语音", desc: "配音 · 音色克隆 · 转写" },
+      { mod: "whitemodel", icon: "", title: "白模视频", desc: "实拍 → 石膏模型" },
     ];
     const short = (mod) => ({ video: "视频", llm: "大模型", voice: "语音", whitemodel: "白模" })[mod] || mod;
     const grid = h("div", { class: "caps" });
@@ -1679,7 +1685,7 @@ routes.models = async (main) => {
       const running = l?.modelId ? models.find((m) => m.id === l.modelId) : null;
       const evict = (def.exclusive || []).filter((o) => snap.loaded[o] || (o === "video" && snap.comfyModelsLoaded)).map(short);
       const needSwitch = loaded && c.mod !== "video" && running && wantId && running.id !== wantId;
-      const sel = h("select", { style: "width:100%" }, models.map((m) => h("option", { value: m.id, selected: m.id === wantId }, `${m.name}${ctxOf(m) ? " · " + ctxOf(m) : ""}${m.tested ? "" : "（未测试）"}`)));
+      const sel = h("select", { style: "width:100%" }, models.filter((m) => !m.hereMissing && !m.hidden).map((m) => h("option", { value: m.id, selected: m.id === wantId }, `${m.name}${ctxOf(m) ? " · " + ctxOf(m) : ""}${m.tested ? "" : "（未测试）"}`)));
       sel.onchange = async () => { try { await api("/models/default", { method: "POST", body: { modality: c.mod, modelId: sel.value } }); snap = await api("/models"); drawAll(); toast(loaded && running && running.id !== sel.value ? `已设为默认，点「切换」立即换成 ${sel.value}` : `${c.title} 默认模型：${sel.value}`, "ok"); } catch (e) { toast(e.message, "error"); } };
       const specLine = want ? h("div", { class: "muted small", style: "margin-top:4px" },
         [want.params ? `参数 ${want.params}` : null, want.quant ? `量化 ${want.quant}` : null,
@@ -1706,7 +1712,7 @@ routes.models = async (main) => {
       const busyHere = snap.busy && snap.busy.modality === c.mod ? snap.busy : null;
       grid.append(h("div", { class: "cap" + (loaded ? " on" : "") },
         h("div", { class: "cap-head" },
-          h("div", { class: "cap-name" }, h("b", null, `${c.icon} ${c.title}`), h("div", { class: "muted small" }, c.desc)),
+          h("div", { class: "cap-name" }, h("b", null, `${c.title}`), h("div", { class: "muted small" }, c.desc)),
           h("div", { class: "cap-model" }, models.length > 1 || c.mod === "llm" || c.mod === "voice" ? sel : h("span", { class: "small" }, want?.name || ""), specLine),
           h("div", { class: "cap-act" }, status, btns)),
         busyHere ? h("div", { class: "hint", style: "margin-top:6px" }, h("span", { class: "spin" }), ` ${busyHere.action === "load" ? "加载中" : "卸载中"}：${busyHere.progress?.at(-1)?.text || "…"}`) : null,
@@ -1720,7 +1726,10 @@ routes.models = async (main) => {
     // grouped by capability, each group naming (and letting you change) the model the dashboard loads
     const rowFor = (m) => {
       const l = snap.loaded[m.modality]; const loaded = l && (l.modelId === m.id || (m.modality === "video" && snap.comfyModelsLoaded));
-      const st = loaded ? h("span", { class: "badge on" }, "已加载") : m.tested ? h("span", { class: "badge done" }, "已测试") : h("span", { class: "badge" }, "未测试");
+      const st = h("div", { class: "row", style: "gap:4px;flex-wrap:wrap" },
+        m.hereMissing ? h("span", { class: "badge", title: `权重不在这台机器上：${m.source?.path || ""}`, style: "opacity:.75" }, "本机没有")
+          : loaded ? h("span", { class: "badge on" }, "已加载") : m.tested ? h("span", { class: "badge done" }, "已测试") : h("span", { class: "badge" }, "未测试"),
+        m.hidden ? h("span", { class: "badge", title: "在「设置 → 模型显示」里隐藏了：不出现在选择列表里，这里仍可加载", style: "opacity:.75" }, "已隐藏") : null);
       const acts = h("div", { class: "row", style: "gap:4px;flex-wrap:wrap" });
       const runTest = async () => {
         const body = h("div", null, h("p", { class: "hint" }, "加载 → 记显存与耗时 → 真实推理（LLM：中英各一问 + 模型列表；语音：合成一句再转写回读；视频/白模：跑一条真实小任务）。全部通过才标为「已测试」。"), h("div", { class: "row", style: "margin-top:6px" }, h("span", { class: "spin" }), h("span", { class: "muted small" }, "开始…")));
@@ -1753,14 +1762,18 @@ routes.models = async (main) => {
       const list = snap.models.filter((m) => (mod === "asr" ? m.modality === "voice" && /转写|ASR|sensevoice/i.test(m.name + m.id) : m.modality === mod && !/转写|ASR|sensevoice/i.test(m.name + m.id)));
       if (!list.length) continue;
       const def = snap.defaults?.[mod];
-      const head = h("div", { class: "row between", style: "margin-top:14px" },
-        h("h3", null, `${MOD_ICON[mod] || (mod === "asr" ? "📝" : "")} ${mod === "asr" ? "语音转写" : snap.modalities[mod]?.label || mod}`, h("span", { class: "muted small" }, `　${list.length} 个`)));
+      // 每个能力自成一块：标题坐在浅一档的顶栏上，跟下面的表格明确分开，
+      // 之前标题和内容同色同背景，滚起来根本分不出哪儿是哪儿
+      const head = h("div", { class: "mgroup-h" },
+        h("h3", null, `${mod === "asr" ? "语音转写" : snap.modalities[mod]?.label || mod}`),
+        h("span", { class: "badge" }, `${list.length} 个`),
+        h("span", { class: "spacer" }));
       if (HOME_MODS.includes(mod)) {
-        const sel = h("select", null, list.filter((m) => m.tested).map((m) => h("option", { value: m.id, selected: m.id === def }, m.name)));
+        const sel = h("select", null, list.filter((m) => m.tested && !m.hereMissing && !m.hidden).map((m) => h("option", { value: m.id, selected: m.id === def }, m.name)));
         sel.onchange = async () => { await api("/models/default", { method: "POST", body: { modality: mod, modelId: sel.value } }); snap = await api("/models"); drawAll(); toast("默认模型已改，仪表盘按钮跟着变", "ok"); };
         head.append(h("span", { class: "row", style: "gap:6px;align-items:center" }, h("span", { class: "muted small" }, "仪表盘默认"), sel));
       } else head.append(h("span", { class: "muted small" }, "随用随载，不设默认"));
-      catCard.append(head, h("table", null, h("tr", null, h("th", null, "模型"), h("th", null, "量化"), h("th", null, "参数"), h("th", null, "上下文"), h("th", null, "权重"), h("th", null, "显存"), h("th", null, "状态"), h("th", null, "")), list.map(rowFor)));
+      catCard.append(h("div", { class: "mgroup" }, head, h("div", { class: "mgroup-b" }, h("table", { class: "models" }, h("tr", null, h("th", null, "模型"), h("th", null, "量化"), h("th", null, "参数"), h("th", null, "上下文"), h("th", null, "权重"), h("th", null, "显存"), h("th", null, "状态"), h("th", null, "")), list.map(rowFor)))));
     }
   }
   function drawLog() {
@@ -1776,14 +1789,60 @@ routes.models = async (main) => {
 
 function chatPanel(chatCard, snap) {
     chatCard.innerHTML = "";
-    const out = h("div", { class: "chatlog", style: "max-height:320px;overflow:auto;background:var(--code);border-radius:8px;padding:8px;font-size:13px;white-space:pre-wrap;min-height:80px" });
-    const inp = h("textarea", { placeholder: "问点什么…（发送会自动开机 + 加载默认 LLM，首次约 1–4 分钟）", style: "min-height:60px" });
-    const sys = h("input", { placeholder: "可选：系统提示词", value: "" });
+    const inner = h("div", { class: "chat-inner" });
+    const out = h("div", { class: "chat-log" }, inner);
+    const empty = h("div", { class: "chat-empty" }, "跟 GPU 上的本地大模型说话。", h("br"), "第一次发送会自动开机并加载模型，大约 1–4 分钟。");
+    inner.append(empty);
+    const inp = h("textarea", { placeholder: "问点什么…  ⌘/Ctrl+Enter 发送" });
+    const sys = h("input", { placeholder: "系统提示词（可选）", value: "" });
     const msgs = [];
-    let cur = snap.loaded.llm?.modelId; const sel = h("select", null, snap.models.filter((m) => m.modality === "llm" && m.tested).map((m) => h("option", { value: m.id, selected: m.id === cur }, m.name)));
+    let cur = snap.loaded.llm?.modelId; const sel = h("select", null, snap.models.filter((m) => m.modality === "llm" && m.tested && !m.hidden && !m.hereMissing).map((m) => h("option", { value: m.id, selected: m.id === cur }, m.name)));
+    // 带 mmproj 的模型能看图（Qwen3-VL / Qwen3.6 / OCR）。图片走 OpenAI 的 image_url 消息，
+    // 直接进代理，不经过控制面的 JSON 体积限制。
+    const canSee = (id) => ((snap.models.find((m) => m.id === id)?.args) || []).includes("--mmproj");
+    const atts = [];                                    // [{name, url}]，url 是缩过的 data:image/jpeg
+    const thumbs = h("div", { class: "chat-atts" });
+    const drawAtts = () => {
+      thumbs.innerHTML = ""; thumbs.hidden = !atts.length;
+      atts.forEach((a, i) => thumbs.append(h("span", { class: "att" }, h("img", { src: a.url, alt: a.name }),
+        h("button", { class: "x", title: "移除", onclick: () => { atts.splice(i, 1); drawAtts(); } }, "×"))));
+      picBtn.classList.toggle("primary", atts.length > 0);
+    };
+    const addImage = (file) => new Promise((done) => {
+      const fr = new FileReader();
+      fr.onload = () => { const im = new Image(); im.onload = () => {
+        // 缩到长边 1280：视觉塔本来就只吃到那个量级，原图只是白白撑大请求
+        const k = Math.min(1, 1280 / Math.max(im.width, im.height));
+        const cv = h("canvas"); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k);
+        cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+        atts.push({ name: file.name || "图片", url: cv.toDataURL("image/jpeg", 0.85) }); drawAtts(); done();
+      }; im.onerror = () => done(); im.src = fr.result; };
+      fr.onerror = () => done(); fr.readAsDataURL(file);
+    });
+    const pick = h("input", { type: "file", accept: "image/*", multiple: true, style: "display:none" });
+    pick.onchange = async () => { for (const f of [...pick.files]) await addImage(f); pick.value = ""; };
+    const picBtn = h("button", { class: "sm ghost", title: "加图片（需要会看图的模型）", onclick: () => pick.click() }, "图片");
+    drawAtts();
+    inp.addEventListener("paste", async (e) => {
+      const files = [...(e.clipboardData?.items || [])].filter((it) => it.type.startsWith("image/")).map((it) => it.getAsFile()).filter(Boolean);
+      if (!files.length) return; e.preventDefault(); for (const f of files) await addImage(f);
+    });
     const send = async () => {
-      const q = inp.value.trim(); if (!q) return; inp.value = "";
-      msgs.push({ role: "user", content: q }); out.append(h("div", { style: "color:var(--accent)" }, "你：" + q)); const ans = h("div", null, "助手："); const body0 = h("span"); ans.append(body0); out.append(ans); out.scrollTop = out.scrollHeight;
+      const q = inp.value.trim(); if (!q && !atts.length) return;
+      if (atts.length && !canSee(sel.value)) return toast("这个模型不会看图，换一个带视觉的（模型名里写着「看图」的那些）", "warn", 5000);
+      inp.value = "";
+      const shots = atts.splice(0); drawAtts();
+      msgs.push({ role: "user", content: shots.length
+        ? [...(q ? [{ type: "text", text: q }] : []), ...shots.map((a) => ({ type: "image_url", image_url: { url: a.url } }))]
+        : q });
+      empty.remove();
+      inner.append(h("div", { class: "msg me" }, h("div", { class: "who" }, "我"), h("div", { class: "bubble" },
+        shots.length ? h("div", { class: "chat-atts" }, shots.map((a) => h("span", { class: "att" }, h("img", { src: a.url, alt: a.name })))) : null,
+        q ? h("div", null, q) : null)));
+      const body0 = h("div", { class: "bubble" });
+      const txt = h("div");
+      const ans = h("div", { class: "msg" }, h("div", { class: "who" }, "AI"), body0);
+      inner.append(ans); out.scrollTop = out.scrollHeight; out.scrollTop = out.scrollHeight;
       try {
         if (snap.loaded.llm?.modelId !== sel.value) await api("/models/task", { method: "POST", body: { task: "chat", modelId: sel.value } });
         const r = await fetch("llm/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: sel.value, stream: true, messages: [...(sys.value ? [{ role: "system", content: sys.value }] : []), ...msgs] }) });
@@ -1792,26 +1851,61 @@ function chatPanel(chatCard, snap) {
         // speed is what tells you whether the context you picked is hurting: first token, then tok/s
         const t0 = performance.now(); let firstAt = null, chunks = 0;
         const think = h("details", { class: "think" }, h("summary", { class: "small muted" }, "思考过程"), h("pre", null, ""));
-        const meter = h("div", { class: "muted small" }, "");
-        ans.append(think, meter); think.hidden = true;
+        const meter = h("div", { class: "meter" }, "");
+        // 正文单独一层：直接给 bubble 设 textContent 会把思考块和速度一起抹掉
+        body0.append(txt, think, meter); think.hidden = true;
         while (true) { const { value, done } = await rd.read(); if (done) break; buf += dec.decode(value, { stream: true }); let i; while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line.startsWith("data:")) continue; const d = line.slice(5).trim(); if (d === "[DONE]") continue; try { const j = JSON.parse(d); const dl = j.choices?.[0]?.delta || {}; if (dl.reasoning_content) thinking += dl.reasoning_content; if (dl.content) { text += dl.content; chunks++; if (firstAt == null) firstAt = performance.now(); }
           // Qwen and friends put the chain inside <think>…</think> in ordinary content; pull it out so the answer reads clean
           let shown = text; const m = /^([\s\S]*?)<\/think>/.exec(text);
           if (/<think>/.test(text) || m) { const open = text.indexOf("<think>"); const close = text.indexOf("</think>");
             if (close > 0) { thinking = text.slice(open >= 0 ? open + 7 : 0, close).trim(); shown = text.slice(close + 8).trim(); }
             else { thinking = text.slice(open >= 0 ? open + 7 : 0); shown = ""; } }
-          body0.textContent = shown || (thinking ? "（正在思考…）" : "");
+          txt.textContent = shown || (thinking ? "正在思考…" : "");
           if (thinking) { think.hidden = false; think.querySelector("pre").textContent = thinking; }
           const secs = (performance.now() - t0) / 1000;
           const tps = chunks > 2 && firstAt ? (chunks / ((performance.now() - firstAt) / 1000)).toFixed(1) : null;
           meter.textContent = `${firstAt ? `首字 ${((firstAt - t0) / 1000).toFixed(1)}s · ` : ""}${tps ? `${tps} tok/s · ` : ""}${secs.toFixed(1)}s${thinking ? ` · 思考 ${thinking.length} 字` : ""}`;
           out.scrollTop = out.scrollHeight; } catch {} } }
         msgs.push({ role: "assistant", content: text });
-      } catch (e) { ans.textContent = "助手：出错了 — " + e.message; toast(e.message, "error"); }
+      } catch (e) { txt.textContent = "出错了 — " + e.message; toast(e.message, "error"); }
     };
     inp.onkeydown = (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); };
-    chatCard.append(h("h2", null, "Chat 面板（验证用）"), h("p", { class: "hint" }, "走的就是对外的 OpenAI 兼容端点 ", h("code", null, "llm/v1/chat/completions"), "；agent 用设置页的 API key 调同一个地址。"), h("div", { class: "row" }, sel, h("button", { class: "sm ghost", onclick: () => { msgs.length = 0; out.innerHTML = ""; } }, "清空")), sys, out, inp, h("div", { class: "row", style: "margin-top:6px" }, h("button", { class: "primary sm", onclick: send }, "发送（⌘/Ctrl+Enter）")));
+    const sysWrap = h("div", { style: "margin:0 0 8px" }, sys); sysWrap.hidden = true;
+    chatCard.classList.remove("card"); chatCard.classList.add("chat");
+    // 模型选择放在输入框下面，跟常见的对话产品一致；上面不留任何工具栏，屏幕全给对话
+    chatCard.append(out,
+      h("div", { class: "chat-in" }, h("div", { class: "wrap" },
+        sysWrap,
+        h("div", { class: "box" }, thumbs, inp,
+          h("div", { class: "under" },
+            sel,
+            picBtn, pick,
+            h("button", { class: "sm ghost", title: "给这轮对话加一句系统提示词", onclick: () => { sysWrap.hidden = !sysWrap.hidden; if (!sysWrap.hidden) sys.focus(); } }, "系统提示词"),
+            h("button", { class: "sm ghost", onclick: () => { msgs.length = 0; atts.length = 0; drawAtts(); inner.innerHTML = ""; inner.append(empty); } }, "清空"),
+            h("span", { class: "spacer" }),
+            h("button", { class: "primary sm", onclick: send }, "发送"))),
+        h("div", { class: "chat-foot" }, "走的是对外的 ", h("code", null, "llm/v1/chat/completions"), "，agent 用同一个地址"))));
   }
+
+/** 极简音频播放器。Chrome 的原生 <audio controls> 不吃 color-scheme，在深色界面上是一条浅蓝白的条，
+ *  用户点名说丑；这里只做真正需要的三件事：播放、进度、时间。 */
+function audioPlayer({ src = "", style = "" } = {}) {
+  const el = h("audio", { src, preload: "metadata" });
+  const btn = h("button", { class: "ap-play", type: "button", title: "播放 / 暂停" }, "▶");
+  const bar = h("div", { class: "ap-bar" }, h("i"));
+  const fill = bar.firstChild;
+  const time = h("span", { class: "ap-time mono" }, "0:00");
+  const fmt = (t) => (Number.isFinite(t) ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}` : "0:00");
+  btn.onclick = () => { if (el.paused) el.play().catch(() => {}); else el.pause(); };
+  el.onplay = () => { btn.textContent = "❚❚"; };
+  el.onpause = el.onended = () => { btn.textContent = "▶"; };
+  el.ontimeupdate = () => { const d = el.duration || 0; fill.style.width = d ? `${(el.currentTime / d) * 100}%` : "0%"; time.textContent = `${fmt(el.currentTime)} / ${fmt(d)}`; };
+  el.onloadedmetadata = () => { time.textContent = `0:00 / ${fmt(el.duration)}`; };
+  bar.onclick = (e) => { const r = bar.getBoundingClientRect(); if (el.duration) el.currentTime = ((e.clientX - r.left) / r.width) * el.duration; };
+  const box = h("div", { class: "ap", style }, btn, bar, time, el);
+  box.audio = el;
+  return box;
+}
 
 function voicePanel(card) {
   // 语音 page: engine (model) → its controls; voice = saved / sample / built-in; text → audio; clone → saved voice.
@@ -1827,7 +1921,7 @@ function voicePanel(card) {
     asr: h("div", null, asrBox),
   };
   const tabsBar = h("div", { class: "subtabs" });
-  const TABS = [["synth", "🎙 合成配音"], ["clone", "🧬 克隆音色"], ["asr", "📝 语音转写"]];
+  const TABS = [["synth", "合成配音"], ["clone", "克隆音色"], ["asr", "语音转写"]];
   function drawTabs() {
     tabsBar.innerHTML = "";
     for (const [id, label] of TABS) {
@@ -1875,7 +1969,7 @@ function voicePanel(card) {
     // (only one fits), so say that plainly rather than letting a synth fail later.
     const loadedName = st.engines.find((x) => x.loaded)?.name;
     const isOn = !!e.loaded;
-    const loadBtn = h("button", { class: "sm" + (isOn ? " ghost" : " primary"), disabled: isOn, onclick: async () => {
+    const loadBtn = h("button", { class: "sm" + (isOn ? " ghost" : ""), disabled: isOn, onclick: async () => {
       await api("/models/ensure", { method: "POST", body: { modality: "voice", modelId: e.id } });
       toast(`正在加载 ${e.name}…${loadedName && loadedName !== e.name ? `（会换掉 ${loadedName}）` : ""}`, "ok", 6000);
     } }, isOn ? "已在显存" : "加载这个模型");
@@ -1948,9 +2042,9 @@ function voiceItem(v, kind) {
   }
   function drawSynth() {
     synthBox.innerHTML = "";
-    const text = h("textarea", { placeholder: "要说的话（≤4000 字；中英日粤等按模型支持）", style: "min-height:90px" });
+    const text = h("textarea", { class: "speak-text", placeholder: "要说的话。中英日粤等按模型支持，≤4000 字。" });
     const fmt = h("select", null, ["wav", "mp3"].map((f) => h("option", { value: f }, f)));
-    const player = h("audio", { controls: true, style: "width:100%;margin-top:6px" }); const dl = h("a", { class: "btn sm", hidden: true, download: "tts.wav" }, "下载"); const status = h("span", { class: "muted small" });
+    const playerBox = audioPlayer({ style: "margin-top:8px" }); const player = playerBox.audio; const dl = h("a", { class: "btn sm", hidden: true, download: "tts.wav" }, "下载"); const status = h("span", { class: "muted small" });
     // The project list lives in S, but a deep link straight to #/voice never populated it — the first
     // 保存 then PUT to `projects//assets` and 404'd. Fetch it here when it is missing.
     const projSel = h("select", null, (S.projects || []).map((p) => h("option", { value: p.id }, p.name)));
@@ -1988,7 +2082,7 @@ function voiceItem(v, kind) {
         status.textContent = `完成：${r.headers.get("X-Audio-Seconds") ? Number(r.headers.get("X-Audio-Seconds")).toFixed(1) + " 秒" : fmtBytes(lastBlob.size)} · ${r.headers.get("X-Model") || st.engine}`;
       } catch (e) { status.textContent = ""; toast("合成失败：" + e.message, "error", 8000); }
     };
-    synthBox.append(text, h("div", { class: "row", style: "margin-top:6px;flex-wrap:wrap" }, h("button", { class: "primary sm", onclick: speak }, "🎙 合成"), fmt, dl, status), player,
+    synthBox.append(text, h("div", { class: "row", style: "margin-top:8px;flex-wrap:wrap" }, h("button", { class: "primary", onclick: speak }, "合成"), fmt, dl, status), playerBox,
       h("div", { class: "row", style: "margin-top:6px" }, h("span", { class: "muted small" }, "存为素材到"), projSel, h("button", { class: "sm", onclick: async () => { if (!lastBlob) return toast("先合成一段"); await fillProjects(); if (!projSel.value) return toast("还没有项目，先到「项目」页建一个", "warn"); const nm = `tts_${(text.value.trim().slice(0, 12) || "voice").replace(/[\\/:*?"<>|\s]+/g, "_")}.${fmt.value}`; const up = await fetch(`api/projects/${projSel.value}/assets?name=${encodeURIComponent(nm)}`, { method: "PUT", headers: { "content-type": lastBlob.type || "audio/wav" }, body: lastBlob }); if (!up.ok) return toast("保存失败：" + (await up.text()).slice(0, 160), "error"); const a = await up.json(); const proj = S.projects.find((x) => x.id === projSel.value)?.name || projSel.value; toast(`已存到「${proj}」的素材：${a.name}（${a.id}）`, "ok", 6000); } }, "保存")));
   }
   /** The saved-voice library, shown next to the clone form so you can hear what you already have. */
@@ -2056,7 +2150,7 @@ function voiceItem(v, kind) {
 routes.chat = async (main) => {
   const snap = await api("/models");
   const card = h("div", { class: "card" });
-  main.append(h("h1", null, "对话"), h("p", { class: "hint" }, "GPU 上的本地大模型（默认 Qwen3.8-27B）。发送会自动开机并加载模型（首次 1–4 分钟）；视频任务来了会把它挤出显存，用完自动空闲关机。走的就是对外的 OpenAI 兼容端点，agent 用「接入」页的密钥调同一个地址。"), card);
+  main.append(card);
   chatPanel(card, snap);
 };
 routes.voice = async (main) => {
@@ -2073,10 +2167,10 @@ routes.access = async (main) => {
   main.append(h("h1", null, "接入 · API"),
     h("p", { class: "hint" }, "给 agent / 脚本 / 别的机器用的入口。所有端点共用同一把密钥，认证一律是请求头 ", h("code", null, "Authorization: Bearer <密钥>"), "。"),
     tabbed([
-      ["🔑 密钥", keysCard],
-      ["🔌 端点", epCard],
-      ["💬 大模型接入", promptCard],
-      ["🎙 语音接入", voiceCard],
+      ["密钥", keysCard],
+      ["端点", epCard],
+      ["大模型接入", promptCard],
+      ["语音接入", voiceCard],
     ]));
   // ---- current key: remembered choice → newest revealable → none
   const curKeyId = () => { const want = localStorage.getItem("atelier.currentKey"); const ok = keys.filter((k) => k.revealable); return (ok.find((k) => k.id === want) || ok.at(-1))?.id || null; };
@@ -2116,7 +2210,7 @@ routes.access = async (main) => {
   async function drawPrompt() {
     promptCard.innerHTML = "";
     const id = curKeyId(); let key = null; try { key = await keyText(id); } catch (e) { toast(e.message, "error"); }
-    llmModels = (S.models?.models || (await api("/models")).models).filter((m) => m.modality === "llm");
+    llmModels = (S.models?.models || (await api("/models")).models).filter((m) => m.modality === "llm" && !m.hidden);
     const curKey = keys.find((k) => k.id === id);
     const sel = h("select", null, keys.filter((k) => k.revealable).map((k) => h("option", { value: k.id, selected: k.id === id }, k.label)));
     sel.onchange = () => { localStorage.setItem("atelier.currentKey", sel.value); drawPrompt(); drawKeys(); };
@@ -2289,11 +2383,43 @@ routes.settings = async (main) => {
         h("button", { class: "sm", onclick: () => copy(url + ".md") }, "复制链接")));
   }
   drawRules();
+  // ---- 模型显示：目录里哪些模型出现在各处的选择列表里 --------------------------------------
+  const modelsCard = h("div", { class: "card" });
+  async function drawModelVis() {
+    modelsCard.innerHTML = ""; modelsCard.append(h("h2", null, "模型显示"), h("p", { class: "muted small" }, "读取中…"));
+    let snap; try { snap = await api("/models"); } catch (e) { modelsCard.innerHTML = ""; modelsCard.append(h("h2", null, "模型显示"), h("div", { class: "errbox" }, e.message)); return; }
+    modelsCard.innerHTML = "";
+    modelsCard.append(h("h2", null, "模型显示"),
+      h("p", { class: "hint" }, "共享库 /model 里能用的模型不少，但常用的就那几个。取消勾选的模型不再出现在仪表盘、对话、模型管家的下拉里，也不会被当成兜底默认；「模型管家」页面仍然列出全部，随时能加载或测试。"));
+    const groups = {};
+    for (const m of snap.models) (groups[m.modality] = groups[m.modality] || []).push(m);
+    for (const [mod, list] of Object.entries(groups)) {
+      const body = h("div", { class: "mgroup-b" });
+      for (const m of list) {
+        const cb = h("input", { type: "checkbox", checked: !m.hidden, disabled: m.hereMissing });
+        cb.onchange = async () => {
+          cb.disabled = true;
+          try { await api(`/models/${m.id}`, { method: "PATCH", body: { hidden: !cb.checked } }); m.hidden = !cb.checked; toast(`${m.name} ${cb.checked ? "已显示" : "已隐藏"}`, "ok", 1500); }
+          catch (e) { cb.checked = !cb.checked; toast(e.message, "error"); }
+          finally { cb.disabled = false; }
+        };
+        body.append(h("label", { class: "row", style: "gap:8px;padding:5px 2px;align-items:baseline" }, cb,
+          h("span", null, m.name, " ",
+            h("span", { class: "muted small" }, [m.quant, m.fileGb ? m.fileGb + " GB" : null, m.vram ? `实测 ${fmtG(m.vram)}` : m.vramEstimate ? `估算 ${fmtG(m.vramEstimate)}` : null].filter(Boolean).join(" · ")),
+            m.hereMissing ? h("span", { class: "badge", style: "margin-left:6px;opacity:.75", title: "权重不在当前这台 GPU 机上" }, "本机没有") : null)));
+      }
+      modelsCard.append(h("div", { class: "mgroup" },
+        h("div", { class: "mgroup-h" }, h("h3", null, snap.modalities[mod]?.label || mod), h("span", { class: "badge" }, `${list.filter((m) => !m.hidden).length}/${list.length}`), h("span", { class: "spacer" })),
+        body));
+    }
+  }
+  drawModelVis();
   main.append(h("h1", null, "设置"), tabbed([
-    ["🤖 提示词助手", h("div", { class: "grid g2" }, aiCard, rulesCard)],
-    ["🗄 存储", storageCard],
-    ["🔐 安全", h("div", { class: "grid g2" }, h("div", { class: "card" }, h("h2", null, "Passkeys"), h("p", { class: "hint" }, "新设备在登录页注册后，需在服务器执行 ", h("code", null, "atelier auth approve <CODE>"), " 批准。"), tbl), auditCard)],
-    ["ℹ️ 关于", h("div", { class: "grid g2" },
+    ["提示词助手", h("div", { class: "grid g2" }, aiCard, rulesCard)],
+    ["模型显示", modelsCard],
+    ["存储", storageCard],
+    ["安全", h("div", { class: "grid g2" }, h("div", { class: "card" }, h("h2", null, "Passkeys"), h("p", { class: "hint" }, "新设备在登录页注册后，需在服务器执行 ", h("code", null, "atelier auth approve <CODE>"), " 批准。"), tbl), auditCard)],
+    ["关于", h("div", { class: "grid g2" },
     keysCard,
     h("div", { class: "card" }, h("h2", null, "关于"), h("div", { class: "kv" }, h("div", null, "版本"), h("div", null, meta.version), h("div", null, "ffmpeg"), h("div", null, meta.ffmpeg.ok ? `${meta.ffmpeg.version.split(" ").slice(0, 3).join(" ")} · libass ${meta.ffmpeg.ass ? "✓" : "✗"} · drawtext ${meta.ffmpeg.drawtext ? "✓" : "✗"}` : "不可用：" + meta.ffmpeg.error), h("div", null, "字幕字体"), h("div", null, meta.fontName), h("div", null, "提示词助手"), h("div", null, meta.llm ? "已配置" : "未配置（设置 LLM_API_KEY）"), h("div", null, "分享链接"), h("div", null, meta.fileshare ? "已配置" : "未配置（设置 FILESHARE_TOKEN）"), h("div", null, "GPU 电源"), h("div", null, meta.canControl ? "CompShare 已配置" : "未配置（设置 COMPSHARE_*）"), h("div", null, "提示词规则"), h("div", null, h("a", { href: meta.rulesUrl, target: "_blank" }, meta.rulesUrl))),
       h("h3", { style: "margin-top:14px" }, "参考链接"), h("ul", { class: "small" }, REF_LINKS().map((l) => h("li", null, h("a", { href: l.url, target: "_blank", rel: "noopener" }, l.label), " ", h("span", { class: "muted" }, l.title)))),

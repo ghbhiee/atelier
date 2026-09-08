@@ -110,6 +110,24 @@ ENGINES = {
         "notes": "82M 小模型（Apache-2.0），毫秒级、显存 <1 GB；中文 v1.1-zh 约 100 个内置音色（加载后列出全部），不能克隆；适合大量旁白。",
     },
 }
+
+
+def _installed(spec) -> bool:
+    """Whether this engine can actually run on this box: in-process ones ride the service's own venv,
+    worker ones need their venv to exist. Images differ — the box that made the image may have had a
+    backend this one does not."""
+    return spec["kind"] == "inprocess" or Path(spec["venv"]).exists()
+
+
+# MODEL_ID is what the control plane asked for when it started this runner; if that engine is not
+# installed here, routing to it would 503 every request (and the ASR self-test's TTS step with it).
+# Fall back to whatever *is* installed, preferring the clone-capable in-process one.
+if DEFAULT_ENGINE not in ENGINES or not _installed(ENGINES[DEFAULT_ENGINE]):
+    _fallback = next((k for k, v in ENGINES.items() if _installed(v)), None)
+    if _fallback:
+        log(f"default engine {DEFAULT_ENGINE!r} is not installed here → {_fallback!r}")
+        DEFAULT_ENGINE = _fallback
+
 # OpenAI voice names → something sensible when a client sends alloy/echo/…
 OPENAI_VOICE_MAP = {"alloy": "sample:voice_05", "echo": "sample:voice_09", "fable": "sample:voice_11", "onyx": "sample:voice_12", "nova": "sample:voice_01", "shimmer": "sample:voice_07", "ash": "sample:voice_02", "coral": "sample:voice_03", "sage": "sample:voice_04", "verse": "sample:voice_06"}
 
@@ -382,7 +400,7 @@ def health():
 
 @app.get("/engines")
 def engines():
-    return [{"id": k, "name": s["name"], "loaded": ENGINE[k].loaded, "clone": s["clone"], "langs": s["langs"], "controls": s["controls"], "voices": s["voices"], "notes": s["notes"], "installed": s["kind"] == "inprocess" or Path(s["venv"]).exists(), "default": k == DEFAULT_ENGINE} for k, s in ENGINES.items()]
+    return [{"id": k, "name": s["name"], "loaded": ENGINE[k].loaded, "clone": s["clone"], "langs": s["langs"], "controls": s["controls"], "voices": s["voices"], "notes": s["notes"], "installed": _installed(s), "default": k == DEFAULT_ENGINE} for k, s in ENGINES.items()]
 
 @app.post("/engines/{eid}/load")
 def engine_load(eid: str):
