@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier 工坊</title><link rel="stylesheet" href="app.css"></head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><span class="logo">At</span><div><b>Atelier</b><div class="muted small">一张显卡的工坊</div></div></div>
+    <button id="menu-btn" class="menu-btn" aria-label="菜单" aria-expanded="false">☰</button>
+    <nav id="nav">
+      <a href="#/" data-route="dash">仪表盘</a>
+      <div class="nav-h">创作</div>
+      <a href="#/generate" data-route="generate">快速生成</a>
+      <a href="#/projects" data-route="projects">项目</a>
+      <a href="#/whitemodel" data-route="whitemodel">白模</a>
+      <a href="#/prompts" data-route="prompts">提示词库</a>
+      <a href="#/jobs" data-route="jobs">任务</a>
+      <div class="nav-h">工具</div>
+      <a href="#/chat" data-route="chat">对话</a>
+      <a href="#/voice" data-route="voice">语音</a>
+      <div class="nav-h">系统</div>
+      <a href="#/models" data-route="models">模型管家</a>
+      <a href="#/access" data-route="access">接入 · API</a>
+      <a href="#/settings" data-route="settings">设置</a>
+    </nav>
+    <div class="side-foot">
+      <div id="gpu-chip" class="gpu-chip"><span class="dot"></span><span class="txt">GPU …</span></div>
+      <div class="muted small" id="who"></div>
+      <a href="#" id="logout" class="muted small">退出登录</a>
+    </div>
+  </aside>
+  <main id="main" class="main"></main>
+</div>
+<div id="toasts" class="toasts"></div>
+<div id="modal-root"></div>
+<script src="vendor_hls.min.js"></script>
+<script src="app.js"></script>
+</body></html>

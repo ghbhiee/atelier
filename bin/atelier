@@ -1,0 +1,12 @@
+#!/bin/sh
+# Operator CLI. As root it re-executes as the service user so state.json keeps its ownership.
+ENV_FILE=${ATELIER_ENV:-/etc/atelier/env}
+SERVICE_USER=${ATELIER_USER:-atelier}
+HERE=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+NODE=${NODE_BINARY:-}
+[ -z "$NODE" ] && [ -r "$ENV_FILE" ] && NODE=$(sed -n 's/^NODE_BINARY=//p' "$ENV_FILE")
+[ -z "$NODE" ] && NODE=$(command -v node)
+if [ "$(id -u)" = 0 ] && id "$SERVICE_USER" >/dev/null 2>&1; then
+  exec runuser -u "$SERVICE_USER" -- "$NODE" "$HERE/server/src/cli.js" "$@"
+fi
+exec "$NODE" "$HERE/server/src/cli.js" "$@"

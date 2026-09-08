@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 · Atelier 工坊</title><link rel="stylesheet" href="app.css"></head>
+<body class="login-body"><main class="login">
+<div class="card">
+  <div class="brand"><span class="logo">At</span><div><h1>Atelier 工坊</h1><p class="muted">一张显卡上的视频 / 白模 / 语音 / LLM 工作台 · Passkey 登录</p></div></div>
+  <section id="auth" hidden>
+    <button id="approve" class="primary big-btn">使用 Passkey 登录</button>
+    <div id="auth-status" class="status" hidden></div>
+  </section>
+  <section id="approved" hidden><p class="ok">✔ 新 Passkey 已批准，现在可以登录。</p></section>
+  <details id="reg"><summary id="reg-summary">注册这台设备的 Passkey</summary>
+    <div id="reg-form">
+      <p class="muted">先在本机创建 Passkey，然后由管理员在服务器上执行批准命令。批准前无法登录。</p>
+      <label>Passkey 名称<input id="label" maxlength="64" placeholder="例如 Hongbo MacBook" autocomplete="off"></label>
+      <button id="register" class="secondary">创建 Passkey</button>
+      <div id="reg-status" class="status" hidden></div>
+    </div>
+    <div id="pending" hidden>
+      <p>Passkey 已创建，<strong>等待批准</strong>。请在服务器 13 上执行：</p>
+      <pre id="cmd"></pre>
+      <div class="big-code" id="code"></div>
+      <div id="pending-status" class="status">等待批准中… 本页会自动继续。</div>
+    </div>
+  </details>
+</div>
+<p class="muted foot">WebAuthn · 新 Passkey 一律需要服务器端审批</p>
+</main>
+<script src="static/webauthn.js"></script><script src="login.js"></script></body></html>

@@ -1,0 +1,14 @@
+# Filled in by install-gpu.sh from FLEET_HY2_* in the environment.
+server: __SERVER__
+auth: __PASSWORD__
+tls:
+  sni: __SNI__
+  insecure: true
+socks5:
+  listen: 127.0.0.1:11080
+bandwidth:
+  up: 200 mbps
+  down: 200 mbps
+quic:
+  maxIdleTimeout: 60s
+  keepAlivePeriod: 10s
