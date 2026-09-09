@@ -112,6 +112,10 @@ export function installApi(app, ctx) {
   // Which model a modality means by default (what /llm loads, what the dashboard's one-click buttons pick).
   // What lands in VRAM when the box powers on. Default 视频/H3; set {modality:"off"} to boot into nothing.
   api.get("/models/boot", wrap(async (_req, res) => res.json(await ctx.models.bootPref())));
+  // 车队增量层：这台缺什么、补一次、音色镜像现在多大
+  api.get("/fleet", wrap(async (_req, res) => res.json({ ...ctx.fleet.status(), plan: await ctx.fleet.plan().catch((e) => ({ available: false, reason: e.message })) })));
+  api.post("/fleet/restore", express.json(), wrap(async (req, res) => res.json(await ctx.fleet.restore({ dryRun: !!req.body?.dryRun }))));
+  api.post("/fleet/voices/sync", wrap(async (_req, res) => res.json(await ctx.voiceMirror.sync())));
   api.post("/models/boot", express.json(), wrap(async (req, res) => {
     const mod = req.body?.modality;
     if (mod !== "off" && !(await ctx.models.catalog()).modalities[mod]) throw new Error("未知能力");
@@ -627,6 +631,42 @@ export function installApi(app, ctx) {
     if (!fs.existsSync(f)) return res.status(404).json({ error: "缓存里没有 " + req.params.name });
     res.sendFile(f);
   });
+  // The fleet's incremental layers: everything a box needs on top of whatever base image it booted
+  // from. A box can only be restored from what lives here, so nothing may be changed on a box by hand
+  // (24 GB cards and preemptible instances cannot be snapshotted — layers are the only way back).
+  const fleetDir = () => path.join(config.dataDir, "fleet");
+  const loopbackOnly = (req, res) => {
+    const ip = req.socket.remoteAddress || "";
+    if (/^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ip)) return false;
+    res.status(403).end(); return true;
+  };
+  app.get("/_fleet/layers.json", (req, res) => {
+    if (loopbackOnly(req, res)) return;
+    const f = path.join(fleetDir(), "layers.json");
+    if (!fs.existsSync(f)) return res.json({ version: 1, layers: [] });
+    res.sendFile(f);
+  });
+  app.get("/_fleet/layers/:name", (req, res) => {
+    if (loopbackOnly(req, res)) return;
+    if (!/^[0-9]{3}-[a-z0-9][a-z0-9._-]{0,60}$/i.test(req.params.name)) return res.status(400).end();
+    const f = path.join(fleetDir(), "layers", req.params.name);
+    if (!fs.existsSync(f)) return res.status(404).json({ error: "没有这一层：" + req.params.name });
+    res.sendFile(f);
+  });
+  // Cloned voices only ever exist on the box the user made them on. 13 mirrors them so a box that is
+  // gone (preempted, or a 24 GB card we could not snapshot) does not take them with it.
+  app.get("/_fleet/voices.json", (req, res) => {
+    if (loopbackOnly(req, res)) return;
+    res.json({ voices: ctx.voiceMirror ? ctx.voiceMirror.list() : [] });
+  });
+  app.get("/_fleet/voice/:id", (req, res) => {
+    if (loopbackOnly(req, res)) return;
+    if (!/^[a-z0-9_-]{1,64}$/i.test(req.params.id)) return res.status(400).end();
+    const f = ctx.voiceMirror?.bundle(req.params.id);
+    if (!f) return res.status(404).json({ error: "镜像里没有这个音色" });
+    res.sendFile(f);
+  });
+
   // Loopback-only endpoints for the operator CLI (shares the daemon's in-memory prompt index).
   app.post("/internal/prompts/sync", express.json(), wrap(async (req, res) => {
     const ip = req.socket.remoteAddress || "";

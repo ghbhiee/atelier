@@ -604,6 +604,22 @@ try {
   ok(chatUi.logFirst, "the log is the first thing on the page — no toolbar above it");
   ok(chatUi.pickerUnder, "the model picker lives in the input area, where chat apps put it");
 
+  step("the model manager shows what this box is missing and can restore it");
+  await cdp.eval(`location.hash = '#/models'`); await sleep(1500);
+  const fleetUi = JSON.parse(await cdp.eval(`(() => {
+    const cards = [...document.querySelectorAll('main .card')];
+    const c = cards.find(x => /机器恢复/.test(x.textContent));
+    if (!c) return JSON.stringify({ err: 'no fleet card' });
+    const btns = [...c.querySelectorAll('button')].map(b => b.textContent.trim());
+    // 注意：模板字符串里 \\d 会被吞成 d，正则要么双写反斜杠、要么别用正则
+    const rows = c.innerText.replace(/\\s+/g, " ");
+    return JSON.stringify({ text: c.innerText.slice(0, 600), btns, hasLayerCount: rows.includes(" 层") && rows.includes("音色镜像") });
+  })()`));
+  ok(!fleetUi.err, "the model manager has a machine-restore card");
+  ok(fleetUi.hasLayerCount, "it says how many layers the fleet has: " + (fleetUi.text || "").split("\n").slice(0, 3).join(" / "));
+  ok(fleetUi.btns.some((b) => /补齐|重新检查/.test(b)) && fleetUi.btns.some((b) => /备份音色/.test(b)),
+     "and offers both restore and voice backup: " + fleetUi.btns.join(", "));
+
   step("chat takes images: attach one, see the thumbnail, send it as an image_url message");
   // only models launched with --mmproj can see; make sure one is loadable and picked before attaching
   const seer = JSON.parse(await cdp.eval(`fetch('api/models').then(r => r.json()).then(s => {

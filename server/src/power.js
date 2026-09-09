@@ -134,8 +134,14 @@ export class Power {
         s.audit.push({ at: new Date().toISOString(), action: `gpu.${state}` });
       });
       this.events.emitAll("gpu", await this.snapshot());
-      // Fresh power-on: hand over to the model manager so the box comes up with something usable in VRAM.
-      if (state === "on" && prev !== "on") this.models?.bootLoad?.("probe saw the box come up");
+      // Fresh power-on: first bring the box up to the fleet's current shape (layers), then hand over
+      // to the model manager so it comes up with something usable in VRAM. Order matters — a layer may
+      // be the very thing a model needs (a weight file, a python package).
+      if (state === "on" && prev !== "on") {
+        const boot = () => this.models?.bootLoad?.("probe saw the box come up");
+        if (this.fleet) this.fleet.restoreOnBoot().catch((e) => console.log("[fleet] 恢复失败：" + e.message)).finally(boot);
+        else boot();
+      }
     } else if (withQueue) this.events.emitAll("gpu", await this.snapshot());
     return this.status.state;
   }

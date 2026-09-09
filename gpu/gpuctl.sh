@@ -12,6 +12,7 @@
 #   gpuctl download <url> <dest> [max_gb]  → fetch a small model file/archive into /root/model-cache (detached, see log)
 #   gpuctl log <prog> [lines]     → tail of a supervisor program's log
 #   gpuctl setenv <prog> KEY=VAL… → write /root/runners/<prog>.env (read by the runner wrappers)
+#   gpuctl restore [--dry-run]    → apply the fleet's incremental layers (see gpu/restore.sh)
 set -u
 CACHE=/root/model-cache
 RUNNERS=/root/runners
@@ -153,6 +154,11 @@ PY
     ;;
   setenv)
     prog=${1:?prog}; shift; write_env "$prog" "$@"; echo '{"ok":true}'
+    ;;
+  restore)
+    # 把这台补到车队当前该有的样子（增量层 + 音色）。详见 /root/atelier-gpu/restore.sh。
+    # 最后一行是 JSON，前面的过程写进日志，13 只读最后一行。
+    bash /root/atelier-gpu/restore.sh "$@" 2>&1 | tee -a /root/restore.log | tail -1
     ;;
   *) echo '{"ok":false,"error":"unknown command"}'; exit 1;;
 esac

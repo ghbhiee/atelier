@@ -76,6 +76,13 @@ else
   echo "  · 没有 FLEET_HY2_*，跳过车队隧道（素材走并行 TCP，慢 20 倍）"
 fi
 
+# Where 13 lives, as seen from inside the box (the reverse tunnel's local end). restore.sh reads this
+# to pull the fleet's incremental layers; without it a box only has whatever its base image happened
+# to contain.
+PORT13=$(envget PORT); [ -n "$PORT13" ] || PORT13=18790
+BP=$(envget BASE_PATH)
+remote "mkdir -p /root/runners && printf \"FLEET_BASE='http://127.0.0.1:${PORT13}${BP}'\n\" > /root/runners/fleet.env"
+
 say "6/7 DNS $DNSNAME → its public address, then the certificate"
 IP=$(remote "curl -s -m 8 ifconfig.me || true"); [ -n "$IP" ] || IP=$(echo "$LOGIN" | sed -n 's/.*@\([0-9.]*\).*/\1/p')
 curl -s -X PUT -H "Authorization: sso-key $(envget GODADDY_KEY):$(envget GODADDY_SECRET)" -H "content-type: application/json" \

@@ -559,6 +559,24 @@ try {
     }
   }
 
+  if (!args.base) {
+    step("fleet layers: what this box is missing → restore → nothing missing; the voice mirror answers");
+    const fleetDir = path.join(dataDir, "fleet");
+    await fs.mkdir(path.join(fleetDir, "layers"), { recursive: true });
+    await fs.writeFile(path.join(fleetDir, "layers", "900-test.sh"), "#!/bin/bash\necho hi\n");
+    await fs.writeFile(path.join(fleetDir, "layers.json"), JSON.stringify({ version: 1, layers: [
+      { id: "900-test", note: "自检用的空层", payload: null, sha: "deadbeefdeadbeef", bytes: 20 }] }));
+    const f0 = await ok("/api/fleet");
+    assert(f0.layers === 1 && f0.plan.available === true && f0.plan.missing.length === 1 && f0.plan.missing[0].id === "900-test",
+      "13 knows what this box is short of " + JSON.stringify(f0.plan));
+    const r = await ok("/api/fleet/restore", { method: "POST", body: { dryRun: true } });
+    assert(r.ok === true, "restore runs on the box and answers " + JSON.stringify(r));
+    const man = await fetch(`${base}/_fleet/layers.json`);
+    assert(man.status === 200 && (await man.json()).layers.length === 1, "the box can read the manifest through the fleet door");
+    const v = await ok("/api/fleet/voices/sync", { method: "POST" });
+    assert(Array.isArray(v.pulled) || v.available === false, "the voice mirror can be asked to sync " + JSON.stringify(v));
+  }
+
   step("API keys: create → bearer access → docs public → revoke → 401");
   const docs = await fetch(`${base}/api/v1/docs`); assert(docs.status === 200 && /Atelier 外部 API/.test(await docs.text()), "docs public");
   const oas = await (await fetch(`${base}/api/v1/openapi.json`)).json(); assert(oas.openapi === "3.0.3" && oas.paths["/api/jobs"]?.post && oas.servers[0].url.endsWith(args.path || ""), "openapi spec");

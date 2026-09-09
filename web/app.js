@@ -1644,8 +1644,36 @@ routes.models = async (main) => {
     snap = e.detail; drawAll();
   };
   document.addEventListener("models", onModelsEvent);
-  const head = h("div", { class: "card" }), tasksCard = h("div", { class: "card" }), catCard = h("div", { class: "card" }), logCard = h("div", { class: "card" });
-  main.append(h("h1", null, "模型管家"), h("p", { class: "hint" }, "一张显卡上按需切换：谁在显存里、加载 / 卸载 / 测试新模型。对话和语音的操作面板在左边「工具」栏。"), head, tasksCard, catCard, logCard);
+  const head = h("div", { class: "card" }), tasksCard = h("div", { class: "card" }), catCard = h("div", { class: "card" }), fleetCard = h("div", { class: "card" }), logCard = h("div", { class: "card" });
+  main.append(h("h1", null, "模型管家"), h("p", { class: "hint" }, "一张显卡上按需切换：谁在显存里、加载 / 卸载 / 测试新模型。对话和语音的操作面板在左边「工具」栏。"), head, tasksCard, catCard, fleetCard, logCard);
+  // ---- 车队增量层 ---------------------------------------------------------------------------
+  // 24 GB 的卡和抢占式实例做不了镜像：基础镜像之后的每一样东西都只存在 13 的层里，开机时补回来。
+  async function drawFleet() {
+    fleetCard.innerHTML = ""; fleetCard.append(h("h2", null, "机器恢复"), h("p", { class: "muted small" }, "读取中…"));
+    let f; try { f = await api("/fleet"); } catch (e) { fleetCard.innerHTML = ""; fleetCard.append(h("h2", null, "机器恢复"), h("div", { class: "errbox" }, e.message)); return; }
+    fleetCard.innerHTML = "";
+    const miss = f.plan?.missing || [];
+    const busy = h("span", { class: "muted small" });
+    const btn = h("button", { class: "sm" + (miss.length ? " primary" : ""), disabled: !f.plan?.available || f.running, onclick: async () => {
+      btn.disabled = true; busy.textContent = "补齐中…（装东西可能要几分钟）";
+      try { const r = await api("/fleet/restore", { method: "POST", body: {} }); toast(`补了 ${r.applied} 层，跳过 ${r.skipped}${r.failed ? `，失败 ${r.failed}` : ""}`, r.failed ? "warn" : "ok", 6000); }
+      catch (e) { toast(e.message, "error"); }
+      finally { busy.textContent = ""; drawFleet(); }
+    } }, miss.length ? `补齐 ${miss.length} 层` : "重新检查");
+    const vbtn = h("button", { class: "sm ghost", onclick: async () => {
+      try { const r = await api("/fleet/voices/sync", { method: "POST" }); toast(r.available === false ? r.reason : `备份了 ${r.pulled.length} 个音色（共 ${r.mirrored}）`, "ok"); }
+      catch (e) { toast(e.message, "error"); } finally { drawFleet(); }
+    } }, "备份音色到 13");
+    fleetCard.append(h("h2", null, "机器恢复"),
+      h("p", { class: "hint" }, "租来的卡随时会没，24 GB 和抢占式实例还做不了镜像。所以基础镜像之外的每一样东西都以「层」的形式存在控制面上，开机自动补齐；克隆出来的音色也镜像回来。"),
+      h("div", { class: "kv" },
+        h("div", null, "层"), h("div", null, `${f.layers} 层`, miss.length ? h("span", { class: "badge", style: "margin-left:6px" }, `这台缺 ${miss.length}`) : h("span", { class: "badge done", style: "margin-left:6px" }, "已是最新")),
+        h("div", null, "音色镜像"), h("div", null, `${f.voices?.mirrored ?? 0} 个`),
+        h("div", null, "上次恢复"), h("div", { class: "muted small" }, f.last ? `补 ${f.last.applied} / 跳过 ${f.last.skipped}${f.last.failed ? ` / 失败 ${f.last.failed}` : ""}` : "本次运行还没跑过")),
+      miss.length ? h("ul", { class: "small muted" }, miss.map((l) => h("li", null, h("code", null, l.id), " ", l.note || ""))) : null,
+      h("div", { class: "row", style: "margin-top:10px" }, btn, vbtn, busy));
+  }
+  drawFleet();
   function drawHead() {
     head.innerHTML = "";
     const g = snap.gpu, gpu = S.gpu || {};

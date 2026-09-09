@@ -13,7 +13,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { CompShare, signParams } from "../server/src/compshare.js";
 
-const INSTANCE = process.argv[2] ?? "uhost-xxxxxxxxxxxx";
+const INSTANCE = process.argv[2] ?? "uhost-xxxx";
 const REGION = process.argv[3] ?? "cn-wlcb";
 
 // 1. Signature self-check against the doctest in the official Python SDK

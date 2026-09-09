@@ -13,6 +13,13 @@ KEY=$(envget GPUCTL_KEY); PORT=$(envget GPUCTL_PORT)
 [ -n "$PORT" ] || PORT=$(ss -tlnp 2>/dev/null | grep -oE '127\.0\.0\.1:19[0-9]89' | head -1 | cut -d: -f2)
 RS() { sudo -u atelier ssh -i "$KEY" -p "$PORT" -o StrictHostKeyChecking=no root@127.0.0.1 "$@"; }
 
+echo "== 0/3 把当前层集烤进这台的账本"
+# 用这个镜像开出来的机器天生就「已经应用过」这些层，restore 只补之后新增的。
+# 不做这一步，新机器会把每一层再跑一遍——幂等所以不会坏，但白等好几分钟。
+sh "$SRC/deploy/layer.sh" sync >/dev/null 2>&1 || true
+sh "$SRC/deploy/layer.sh" bake "$NAME"
+
+echo
 echo "== 1/3 把清理脚本送上去并执行（清密钥、停服务）"
 tar -C "$SRC/gpu" -cf - prep-image.sh | sudo -u atelier ssh -i "$KEY" -p "$PORT" -o StrictHostKeyChecking=no root@127.0.0.1 'tar -C /root/atelier-gpu -xf -'
 RS 'bash /root/atelier-gpu/prep-image.sh'

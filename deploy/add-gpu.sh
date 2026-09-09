@@ -63,21 +63,12 @@ if [ -n "${DONOR:-}" ]; then
   sh "$SRC/deploy/clone-env.sh" "$DONOR" "$LOGIN_RAW" all || echo "  ! 克隆没成，退回逐个安装"
 fi
 
-# 4) 缺什么补什么：ffmpeg（pod 镜像常常没有，素材服务一收文件就崩）
-say "ffmpeg / ffprobe"
-remote 'bash /root/atelier-gpu/install-ffmpeg.sh' 2>&1 | tail -2
-
-# 5) ComfyUI + H3 权重软链
-say "ComfyUI + 权重"
-remote 'bash /root/atelier-gpu/install-comfyui.sh' 2>&1 | tail -3
-
-# 6) 另外两个能力：大模型与语音。之前只装视频/白模，切过去才发现另外两个用不了。
-say "llama.cpp（大模型）"
-# 13 上有编好的就走缓存（经隧道几十秒），没有才在盒子上编（20–40 分钟）
-CACHE_URL="http://127.0.0.1:$(envget PORT || echo 18790)$(envget BASE_PATH)/_fleet/cache/llama-cuda-sm120.tgz"
-remote "LLAMA_CACHE_URL='$CACHE_URL' bash /root/atelier-gpu/install-llm.sh" 2>&1 | tail -3 || echo "  ! 大模型没装上，这台只能做视频/白模"
-say "语音栈（IndexTTS-2 + SenseVoice）"
-remote 'bash /root/atelier-gpu/install-voice.sh' 2>&1 | tail -3 || echo "  ! 语音没装上"
+# 4) 补齐软件：全部走车队的增量层。层是「基础镜像 → 现在该有的样子」的差额，存在 13 上
+#    （sh deploy/layer.sh list 看有哪些）。用我们自己的镜像开的机器只补新增的几层，
+#    用厂商裸镜像开的就从头补一遍——同一条路径，不用记哪台装过什么。
+say "补齐软件（车队增量层）"
+sh "$SRC/deploy/layer.sh" sync >/dev/null 2>&1 || true
+remote 'bash /root/atelier-gpu/restore.sh' 2>&1 | tail -20 || echo "  ! 有层没补上，看 /root/restore.log"
 
 # 7) 等它真的能应答
 say "等 ComfyUI 起来"

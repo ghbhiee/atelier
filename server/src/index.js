@@ -20,6 +20,8 @@ import { Avatars } from "./avatars.js";
 import { Storage } from "./storage.js";
 import { GpuCtl, MockGpuCtl } from "./gpuctl.js";
 import { Direct, Backup, AssetSync } from "./direct.js";
+import { VoiceMirror } from "./voicemirror.js";
+import { Fleet } from "./fleet.js";
 import { Models } from "./models.js";
 
 export async function createApp(config) {
@@ -48,6 +50,9 @@ export async function createApp(config) {
   const direct = new Direct(config, { power, gpuctl });
   const backup = new Backup(projects, direct, events);
   const assetSync = new AssetSync(projects, direct, events);
+  const voiceMirror = new VoiceMirror(config, { gpuctl, power });
+  const fleet = new Fleet(config, { gpuctl, power, voiceMirror, assetSync, events });
+  power.fleet = fleet;
   projects.direct = direct; jobs.direct = direct;
   // Real-job hooks for the model test flow (video = tiny H3 clip, whitemodel = synthetic 2 s clip through the node).
   const waitJob = async (id, say, maxMs = 15 * 60_000) => {
@@ -90,6 +95,9 @@ export async function createApp(config) {
     if (c?.available && c.missingOnBox.length) { console.log(`[assetsync] GPU 缺 ${c.missingOnBox.length} 个素材，后台补齐`); assetSync.sync({ pull: false, limit: 5 }).catch(() => {}); }
   }, 5 * 60_000);
   setInterval(() => projects.sweepPending().catch(() => {}), 30 * 60_000);
+  // 每次开机都把这台补到「车队当前该有的样子」：24 G 卡和抢占式实例做不了镜像，
+  // 基础镜像之后的每一样东西都只存在 13 的层里。开完机第一件事就是补齐。
+  setInterval(() => { if (power.status.state === "on" && !jobs.hasActive()) voiceMirror.sync().catch(() => {}); }, 10 * 60_000);
   prompts.startScheduler();
 
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -108,7 +116,7 @@ export async function createApp(config) {
   });
   app.get("/healthz", (_req, res) => res.json({ status: "ok", version: config.version, basePath: config.basePath, activeJobs: [...jobs.jobs.values()].filter((j) => ["queued", "starting", "uploading", "submitted", "running", "downloading"].includes(j.status)).length, busy: !!models.state.busy }));
   const root = express.Router();
-  installApi(root, { config, store, passkeys, power, jobs, projects, events, media, comfy, prompts, edits, masters, avatars, storage, models, gpuctl, direct, backup, assetSync, webDir, webauthnBundle });
+  installApi(root, { config, store, passkeys, power, jobs, projects, events, media, comfy, prompts, edits, masters, avatars, storage, models, gpuctl, direct, backup, assetSync, voiceMirror, fleet, webDir, webauthnBundle });
   if (config.basePath) {
     // Express routing is not slash-strict: app.get("/studio") would also swallow "/studio/" and loop.
     app.use((req, res, next) => { const p = req.originalUrl.split("?")[0]; if (p === "/" || p === config.basePath) return res.redirect(302, config.basePath + "/"); next(); });
